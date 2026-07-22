@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a reproducible plugin problem
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version
+    validations:
+      required: true
+  - type: input
+    id: zotero
+    attributes:
+      label: Zotero version and operating system
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Translation provider
+      options:
+        - MyMemory
+        - Google Cloud Translation
+        - DeepL
+        - Microsoft Translator
+        - LibreTranslate
+        - Ollama
+        - Qwen-MT
+        - SiliconFlow
+        - Volcengine Ark
+        - DeepSeek
+        - Gemini
+        - OpenAI
+        - Custom API
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Actual and expected result
+    validations:
+      required: true
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I removed API keys, private titles and personal data from logs and screenshots.
+          required: true

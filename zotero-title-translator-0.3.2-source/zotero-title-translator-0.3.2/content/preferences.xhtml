@@ -1,0 +1,498 @@
+<div xmlns="http://www.w3.org/1999/xhtml" class="main-section">
+    <style>
+        .ztt-grid {
+            display: grid;
+            grid-template-columns: 220px minmax(360px, 1fr);
+            gap: 10px 14px;
+            align-items: center;
+            max-width: 940px;
+        }
+        .ztt-grid input,
+        .ztt-grid select {
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .ztt-help {
+            max-width: 940px;
+            line-height: 1.55;
+            color: var(--fill-secondary);
+        }
+        .ztt-card {
+            max-width: 940px;
+            padding: 10px 14px 14px;
+            margin: 10px 0 14px;
+            border: 1px solid var(--fill-quinary);
+            border-radius: 7px;
+        }
+        .ztt-card > summary {
+            cursor: pointer;
+            font-weight: 600;
+            padding: 4px 0 8px;
+        }
+        .ztt-card[open] > summary {
+            margin-bottom: 8px;
+        }
+        .ztt-warning {
+            max-width: 940px;
+            padding: 10px 12px;
+            border: 1px solid var(--fill-quinary);
+            border-radius: 6px;
+            line-height: 1.5;
+        }
+        code {
+            user-select: text;
+        }
+    </style>
+
+    <section>
+        <h2>翻译服务</h2>
+        <div class="ztt-grid">
+            <label for="ztt-provider">当前服务</label>
+            <select
+                id="ztt-provider"
+                preference="extensions.zotero.titleTranslator.provider"
+            >
+                <optgroup label="无需商业 API / 本地">
+                    <option value="mymemory">MyMemory 免费在线</option>
+                    <option value="libretranslate">LibreTranslate 自托管</option>
+                    <option value="ollama">Ollama 本地模型</option>
+                </optgroup>
+                <optgroup label="传统机器翻译 API">
+                    <option value="google">Google Cloud Translation</option>
+                    <option value="deepl">DeepL API Free / Pro</option>
+                    <option value="microsoft">Microsoft Translator</option>
+                </optgroup>
+                <optgroup label="大模型平台">
+                    <option value="qwen">阿里云百炼 Qwen-MT</option>
+                    <option value="siliconflow">SiliconFlow（硅基流动）</option>
+                    <option value="volcengine">火山方舟（豆包）</option>
+                    <option value="deepseek">DeepSeek API</option>
+                    <option value="gemini">Google Gemini API</option>
+                    <option value="openai">OpenAI API</option>
+                    <option value="custom">自定义 OpenAI-compatible API</option>
+                </optgroup>
+            </select>
+
+            <label for="ztt-source-language-name">默认源语言名称</label>
+            <input
+                id="ztt-source-language-name"
+                type="text"
+                preference="extensions.zotero.titleTranslator.sourceLanguageName"
+                placeholder="English"
+            />
+
+            <label for="ztt-source-language-code">默认源语言代码</label>
+            <input
+                id="ztt-source-language-code"
+                type="text"
+                preference="extensions.zotero.titleTranslator.sourceLanguageCode"
+                placeholder="en"
+            />
+        </div>
+        <p class="ztt-help">
+            MyMemory 和 TranslateGemma 使用默认源语言；其他多数服务自动识别。
+            目标语言固定为简体中文。下方只需配置你实际选用的服务。
+        </p>
+    </section>
+
+    <details class="ztt-card" open="open">
+        <summary>MyMemory：无需 API Key 的免费在线服务</summary>
+        <div class="ztt-grid">
+            <label for="ztt-mymemory-email">联系邮箱（可选）</label>
+            <input
+                id="ztt-mymemory-email"
+                type="email"
+                preference="extensions.zotero.titleTranslator.myMemoryEmail"
+                placeholder="name@example.com"
+            />
+        </div>
+        <p class="ztt-help">
+            适合少量标题。存在公共配额与流量限制，固定单并发并主动降速。
+        </p>
+    </details>
+
+    <details class="ztt-card">
+        <summary>Google Cloud Translation：免费额度 + 按量付费</summary>
+        <div class="ztt-grid">
+            <label for="ztt-google-key">API Key</label>
+            <input
+                id="ztt-google-key"
+                type="password"
+                preference="extensions.zotero.titleTranslator.googleApiKey"
+                autocomplete="off"
+            />
+        </div>
+        <p class="ztt-help">
+            使用官方 Cloud Translation Basic v2 接口，通过
+            <code>X-goog-api-key</code> 请求头鉴权，并自动识别源语言。
+        </p>
+    </details>
+
+    <details class="ztt-card">
+        <summary>DeepL API Free / Pro</summary>
+        <div class="ztt-grid">
+            <label for="ztt-deepl-plan">套餐</label>
+            <select
+                id="ztt-deepl-plan"
+                preference="extensions.zotero.titleTranslator.deeplPlan"
+            >
+                <option value="free">API Free</option>
+                <option value="pro">API Pro</option>
+            </select>
+
+            <label for="ztt-deepl-key">API Key</label>
+            <input
+                id="ztt-deepl-key"
+                type="password"
+                preference="extensions.zotero.titleTranslator.deeplApiKey"
+                autocomplete="off"
+            />
+        </div>
+    </details>
+
+    <details class="ztt-card">
+        <summary>Microsoft Translator：F0 / 付费层</summary>
+        <div class="ztt-grid">
+            <label for="ztt-ms-endpoint">Endpoint</label>
+            <input
+                id="ztt-ms-endpoint"
+                type="text"
+                preference="extensions.zotero.titleTranslator.microsoftEndpoint"
+            />
+
+            <label for="ztt-ms-key">Subscription Key</label>
+            <input
+                id="ztt-ms-key"
+                type="password"
+                preference="extensions.zotero.titleTranslator.microsoftApiKey"
+                autocomplete="off"
+            />
+
+            <label for="ztt-ms-region">Region（可选）</label>
+            <input
+                id="ztt-ms-region"
+                type="text"
+                preference="extensions.zotero.titleTranslator.microsoftRegion"
+                placeholder="区域或多服务资源需要填写"
+            />
+        </div>
+    </details>
+
+    <details class="ztt-card">
+        <summary>LibreTranslate：开源、自托管</summary>
+        <div class="ztt-grid">
+            <label for="ztt-libre-url">服务地址</label>
+            <input
+                id="ztt-libre-url"
+                type="text"
+                preference="extensions.zotero.titleTranslator.libreTranslateURL"
+            />
+
+            <label for="ztt-libre-key">API Key（可选）</label>
+            <input
+                id="ztt-libre-key"
+                type="password"
+                preference="extensions.zotero.titleTranslator.libreTranslateAPIKey"
+                autocomplete="off"
+            />
+        </div>
+    </details>
+
+    <details class="ztt-card">
+        <summary>Ollama：本地、离线</summary>
+        <div class="ztt-grid">
+            <label for="ztt-ollama-url">Ollama 地址</label>
+            <input
+                id="ztt-ollama-url"
+                type="text"
+                preference="extensions.zotero.titleTranslator.ollamaURL"
+            />
+
+            <label for="ztt-ollama-model">本地模型</label>
+            <input
+                id="ztt-ollama-model"
+                type="text"
+                preference="extensions.zotero.titleTranslator.ollamaModel"
+                placeholder="translategemma:4b"
+            />
+        </div>
+        <p class="ztt-help">
+            推荐先运行 <code>ollama run translategemma:4b</code>。
+        </p>
+    </details>
+
+    <details class="ztt-card" open="open">
+        <summary>阿里云百炼 Qwen-MT</summary>
+        <div class="ztt-grid">
+            <label for="ztt-qwen-base">Base URL</label>
+            <input
+                id="ztt-qwen-base"
+                type="text"
+                preference="extensions.zotero.titleTranslator.qwenBaseURL"
+            />
+
+            <label for="ztt-qwen-key">API Key</label>
+            <input
+                id="ztt-qwen-key"
+                type="password"
+                preference="extensions.zotero.titleTranslator.qwenApiKey"
+                autocomplete="off"
+            />
+
+            <label for="ztt-qwen-model">模型</label>
+            <input
+                id="ztt-qwen-model"
+                type="text"
+                preference="extensions.zotero.titleTranslator.qwenModel"
+                placeholder="qwen-mt-plus"
+            />
+        </div>
+    </details>
+
+    <details class="ztt-card">
+        <summary>SiliconFlow（硅基流动）</summary>
+        <div class="ztt-grid">
+            <label for="ztt-sf-base">Base URL</label>
+            <input
+                id="ztt-sf-base"
+                type="text"
+                preference="extensions.zotero.titleTranslator.siliconflowBaseURL"
+            />
+
+            <label for="ztt-sf-key">API Key</label>
+            <input
+                id="ztt-sf-key"
+                type="password"
+                preference="extensions.zotero.titleTranslator.siliconflowApiKey"
+                autocomplete="off"
+            />
+
+            <label for="ztt-sf-model">模型</label>
+            <input
+                id="ztt-sf-model"
+                type="text"
+                preference="extensions.zotero.titleTranslator.siliconflowModel"
+                placeholder="Qwen/Qwen3-8B"
+            />
+        </div>
+    </details>
+
+    <details class="ztt-card">
+        <summary>火山方舟（豆包）</summary>
+        <div class="ztt-grid">
+            <label for="ztt-volc-base">Base URL</label>
+            <input
+                id="ztt-volc-base"
+                type="text"
+                preference="extensions.zotero.titleTranslator.volcengineBaseURL"
+            />
+
+            <label for="ztt-volc-key">API Key</label>
+            <input
+                id="ztt-volc-key"
+                type="password"
+                preference="extensions.zotero.titleTranslator.volcengineApiKey"
+                autocomplete="off"
+            />
+
+            <label for="ztt-volc-model">模型 / Endpoint ID</label>
+            <input
+                id="ztt-volc-model"
+                type="text"
+                preference="extensions.zotero.titleTranslator.volcengineModel"
+                placeholder="填写可调用的模型 ID 或 ep-... 接入点"
+            />
+        </div>
+    </details>
+
+    <details class="ztt-card">
+        <summary>DeepSeek API</summary>
+        <div class="ztt-grid">
+            <label for="ztt-ds-base">Base URL</label>
+            <input
+                id="ztt-ds-base"
+                type="text"
+                preference="extensions.zotero.titleTranslator.deepseekBaseURL"
+            />
+
+            <label for="ztt-ds-key">API Key</label>
+            <input
+                id="ztt-ds-key"
+                type="password"
+                preference="extensions.zotero.titleTranslator.deepseekApiKey"
+                autocomplete="off"
+            />
+
+            <label for="ztt-ds-model">模型</label>
+            <input
+                id="ztt-ds-model"
+                type="text"
+                preference="extensions.zotero.titleTranslator.deepseekModel"
+            />
+        </div>
+    </details>
+
+    <details class="ztt-card">
+        <summary>Google Gemini API</summary>
+        <div class="ztt-grid">
+            <label for="ztt-gemini-base">Base URL</label>
+            <input
+                id="ztt-gemini-base"
+                type="text"
+                preference="extensions.zotero.titleTranslator.geminiBaseURL"
+            />
+
+            <label for="ztt-gemini-key">API Key</label>
+            <input
+                id="ztt-gemini-key"
+                type="password"
+                preference="extensions.zotero.titleTranslator.geminiApiKey"
+                autocomplete="off"
+            />
+
+            <label for="ztt-gemini-model">模型</label>
+            <input
+                id="ztt-gemini-model"
+                type="text"
+                preference="extensions.zotero.titleTranslator.geminiModel"
+            />
+        </div>
+    </details>
+
+    <details class="ztt-card">
+        <summary>OpenAI API</summary>
+        <div class="ztt-grid">
+            <label for="ztt-openai-base">Base URL</label>
+            <input
+                id="ztt-openai-base"
+                type="text"
+                preference="extensions.zotero.titleTranslator.openaiBaseURL"
+            />
+
+            <label for="ztt-openai-key">API Key</label>
+            <input
+                id="ztt-openai-key"
+                type="password"
+                preference="extensions.zotero.titleTranslator.openaiApiKey"
+                autocomplete="off"
+            />
+
+            <label for="ztt-openai-model">模型</label>
+            <input
+                id="ztt-openai-model"
+                type="text"
+                preference="extensions.zotero.titleTranslator.openaiModel"
+                placeholder="填写支持 Chat Completions 的模型"
+            />
+        </div>
+    </details>
+
+    <details class="ztt-card">
+        <summary>自定义 OpenAI-compatible API</summary>
+        <div class="ztt-grid">
+            <label for="ztt-custom-base">Base URL</label>
+            <input
+                id="ztt-custom-base"
+                type="text"
+                preference="extensions.zotero.titleTranslator.customBaseURL"
+                placeholder="https://example.com/v1"
+            />
+
+            <label for="ztt-custom-key">API Key（可选）</label>
+            <input
+                id="ztt-custom-key"
+                type="password"
+                preference="extensions.zotero.titleTranslator.customApiKey"
+                autocomplete="off"
+            />
+
+            <label for="ztt-custom-model">模型</label>
+            <input
+                id="ztt-custom-model"
+                type="text"
+                preference="extensions.zotero.titleTranslator.customModel"
+            />
+        </div>
+    </details>
+
+    <section>
+        <h2>完成通知</h2>
+        <div class="ztt-grid">
+            <label for="ztt-show-completion-notification">
+                翻译完成后显示提示
+            </label>
+            <input
+                id="ztt-show-completion-notification"
+                type="checkbox"
+                preference="extensions.zotero.titleTranslator.showCompletionNotification"
+            />
+
+            <label for="ztt-completion-notification-seconds">
+                自动关闭时间（秒）
+            </label>
+            <input
+                id="ztt-completion-notification-seconds"
+                type="number"
+                min="2"
+                max="30"
+                step="1"
+                preference="extensions.zotero.titleTranslator.completionNotificationSeconds"
+            />
+        </div>
+        <p class="ztt-help">
+            完成提示使用 Zotero 右下角的无声、非模态通知，不再调用会触发
+            Windows 系统提示音的完成弹窗。关闭此开关后，翻译结束时不显示完成窗口；
+            配置错误和整库翻译前的确认框仍会显示。
+        </p>
+    </section>
+
+    <section>
+        <h2>批量处理</h2>
+        <div class="ztt-grid">
+            <label for="ztt-concurrency">并发数</label>
+            <input
+                id="ztt-concurrency"
+                type="number"
+                min="1"
+                max="6"
+                step="1"
+                preference="extensions.zotero.titleTranslator.concurrency"
+            />
+
+            <label for="ztt-timeout">超时（毫秒）</label>
+            <input
+                id="ztt-timeout"
+                type="number"
+                min="5000"
+                step="1000"
+                preference="extensions.zotero.titleTranslator.timeoutMs"
+            />
+
+            <label for="ztt-skip-chinese">跳过中文标题</label>
+            <input
+                id="ztt-skip-chinese"
+                type="checkbox"
+                preference="extensions.zotero.titleTranslator.skipChinese"
+            />
+        </div>
+        <p class="ztt-help">
+            MyMemory 和 Ollama 固定单并发；其他服务使用设定的并发数。
+            整库翻译前会显示实际请求数量和服务费用提示。
+        </p>
+    </section>
+
+    <section>
+        <h2>数据与安全</h2>
+        <p class="ztt-help">
+            译题保存在 Extra：
+            <code>ZoteroTitleTranslation: 译题</code>。
+            中文原标题直接显示，不重复写入。
+        </p>
+        <p class="ztt-warning">
+            API Key 仅保存在当前设备的 Zotero 本地配置中，不会发送给本项目作者，
+            但当前版本未对本地保存的密钥进行额外加密。请勿在公共或多人共用设备中
+            保存高权限密钥。除本机 Ollama 和本机 LibreTranslate 外，远程服务都会
+            接收待翻译标题。
+        </p>
+    </section>
+</div>

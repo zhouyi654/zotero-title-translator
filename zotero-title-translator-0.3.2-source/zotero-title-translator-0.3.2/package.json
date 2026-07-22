@@ -1,0 +1,14 @@
+{
+  "name": "zotero-title-translator",
+  "version": "0.3.2",
+  "private": true,
+  "description": "Zotero 9 title translation plugin",
+  "scripts": {
+    "test": "node --check bootstrap.js && node --check core.js && node tests/core.test.js && node tests/v030.test.js && node tests/v031.test.js && node tests/v032.test.js",
+    "build": "python build_xpi.py"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

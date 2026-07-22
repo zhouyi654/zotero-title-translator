@@ -1,0 +1,24 @@
+{
+  "manifest_version": 2,
+  "name": "Zotero 标题翻译",
+  "version": "0.3.2",
+  "description": "在 Zotero 的“标题（中文）”列中显示中文标题，支持单篇、批量及整库翻译，并可配置多种在线、本地和自托管翻译服务。",
+  "author": "zhouyi654",
+  "applications": {
+    "zotero": {
+      "id": "zotero-title-translator@zhouyi654.github.io",
+      "update_url": "https://github.com/zhouyi654/zotero-title-translator/releases/latest/download/updates.json",
+      "strict_min_version": "9.0",
+      "strict_max_version": "9.0.*"
+    }
+  },
+  "homepage_url": "https://github.com/zhouyi654/zotero-title-translator",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "64": "icons/icon-64.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  }
+}

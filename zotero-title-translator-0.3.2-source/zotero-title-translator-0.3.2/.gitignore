@@ -1,0 +1,30 @@
+# Build output
+dist/
+*.xpi
+*.zip
+
+# Local credentials and environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
+credentials.*
+
+# Zotero profiles, exports and logs
+zotero-profile/
+*.sqlite
+*.sqlite-journal
+*.log
+debug-output*
+ErrorReport*
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+__pycache__/
+*.py[cod]
+node_modules/
