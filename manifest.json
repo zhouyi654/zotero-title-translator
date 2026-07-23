@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "Zotero 标题翻译",
-  "version": "0.3.2",
-  "description": "在 Zotero 的“标题（中文）”列中显示中文标题，支持单篇、批量及整库翻译，并可配置多种在线、本地和自托管翻译服务。",
+  "version": "0.3.4",
+  "description": "在“标题（中文）”列显示中文标题；支持所选条目、所选分类、整个文献库以及新导入文献的可选自动翻译。",
   "author": "zhouyi654",
   "applications": {
     "zotero": {

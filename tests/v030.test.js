@@ -27,10 +27,10 @@ assert.ok(!bootstrap.includes("Zotero.MenuManager.unregister("));
 assert.ok(bootstrap.includes('target: "main/library/collection"'));
 assert.ok(bootstrap.includes('target: "main/menubar/tools"'));
 assert.ok(
-    bootstrap.includes("翻译所属文献库全部未翻译标题")
+    bootstrap.includes("翻译此分类中的未翻译标题")
 );
 assert.ok(
-    bootstrap.includes("翻译当前文献库全部未翻译标题")
+    bootstrap.includes("翻译当前文献库中的未翻译标题")
 );
 
 // 服务商

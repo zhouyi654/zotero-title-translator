@@ -59,6 +59,10 @@ pref("extensions.zotero.titleTranslator.apiKey", "");
 pref("extensions.zotero.titleTranslator.model", "qwen-mt-plus");
 pref("extensions.zotero.titleTranslator.targetLanguage", "Chinese");
 
+// 自动翻译新导入条目。默认关闭，避免未经确认产生远程调用或费用。
+pref("extensions.zotero.titleTranslator.autoTranslateOnAdd", false);
+pref("extensions.zotero.titleTranslator.autoTranslateDelaySeconds", 3);
+
 // 完成通知：使用无声的 Zotero.ProgressWindow，不使用系统 alert。
 pref("extensions.zotero.titleTranslator.showCompletionNotification", true);
 pref("extensions.zotero.titleTranslator.completionNotificationSeconds", 6);

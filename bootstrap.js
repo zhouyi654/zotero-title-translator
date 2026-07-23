@@ -56,7 +56,13 @@ function createTitleTranslator(rootURI) {
 
     let registeredColumnKey = null;
     let preferencePaneID = null;
+    let notifierObserverID = null;
     let busy = false;
+    let pluginActive = true;
+    let autoTranslateRunning = false;
+    let autoTranslateScheduleGeneration = 0;
+    let lastAutoTranslateConfigError = "";
+    const autoTranslatePendingIDs = new Set();
 
     const menuIconURI = rootURI + "icons/menu.svg";
 
@@ -325,16 +331,94 @@ function createTitleTranslator(rootURI) {
         ];
         for (const value of candidates) {
             const numeric = Number(value);
-            if (Number.isInteger(numeric) && numeric > 0) {
-                if (Zotero.Libraries.get(numeric)) {
-                    return numeric;
-                }
+            if (
+                Number.isInteger(numeric)
+                && numeric > 0
+                && Zotero.Libraries.get(numeric)
+            ) {
+                return numeric;
             }
         }
         return null;
     }
 
-    function selectedLibraryContext(window) {
+    function getCollectionFromRow(row) {
+        if (!row) {
+            return null;
+        }
+
+        const ref = row.ref;
+        if (
+            ref
+            && typeof ref.getChildItems === "function"
+            && Number(ref.id) > 0
+        ) {
+            return ref;
+        }
+
+        const isCollection =
+            typeof row.isCollection === "function"
+            && row.isCollection();
+
+        if (!isCollection) {
+            return null;
+        }
+
+        const collectionID = Number(
+            ref?.id
+            ?? ref?.collectionID
+            ?? row.collectionID
+        );
+
+        return Number.isInteger(collectionID) && collectionID > 0
+            ? Zotero.Collections.get(collectionID)
+            : null;
+    }
+
+    function scopeFromRows(window, rows = []) {
+        const pane = window?.ZoteroPane || Zotero.getActiveZoteroPane();
+        if (!pane || rows.length !== 1) {
+            return null;
+        }
+
+        const row = rows[0];
+        const collection = getCollectionFromRow(row);
+        if (collection) {
+            const library = Zotero.Libraries.get(collection.libraryID);
+            return {
+                type: "collection",
+                pane,
+                row,
+                library,
+                libraryID: collection.libraryID,
+                collection,
+                collectionID: collection.id,
+                name: collection.name
+            };
+        }
+
+        const libraryID = getRowLibraryID(row);
+        const library = libraryID
+            ? Zotero.Libraries.get(libraryID)
+            : null;
+
+        if (!library) {
+            return null;
+        }
+
+        return {
+            type: "library",
+            pane,
+            row,
+            library,
+            libraryID,
+            collection: null,
+            collectionID: null,
+            name: library.name
+        };
+    }
+
+    function selectedScopeContext(window) {
         const pane = window?.ZoteroPane || Zotero.getActiveZoteroPane();
         if (!pane) {
             return null;
@@ -345,26 +429,46 @@ function createTitleTranslator(rootURI) {
             rows = pane.getCollectionTreeRows() || [];
         }
 
-        if (rows.length === 1) {
-            const libraryID = getRowLibraryID(rows[0]);
-            if (libraryID) {
+        const rowScope = scopeFromRows(window, rows);
+        if (rowScope) {
+            return rowScope;
+        }
+
+        if (typeof pane.getSelectedCollection === "function") {
+            const collection = pane.getSelectedCollection();
+            if (collection) {
+                const library = Zotero.Libraries.get(
+                    collection.libraryID
+                );
                 return {
+                    type: "collection",
                     pane,
-                    row: rows[0],
-                    libraryID,
-                    library: Zotero.Libraries.get(libraryID)
+                    row: rows[0] || null,
+                    library,
+                    libraryID: collection.libraryID,
+                    collection,
+                    collectionID: collection.id,
+                    name: collection.name
                 };
             }
         }
 
         if (typeof pane.getSelectedLibraryID === "function") {
             const libraryID = Number(pane.getSelectedLibraryID());
-            if (Number.isInteger(libraryID) && libraryID > 0) {
+            const library = Number.isInteger(libraryID)
+                ? Zotero.Libraries.get(libraryID)
+                : null;
+
+            if (library) {
                 return {
+                    type: "library",
                     pane,
                     row: rows[0] || null,
+                    library,
                     libraryID,
-                    library: Zotero.Libraries.get(libraryID)
+                    collection: null,
+                    collectionID: null,
+                    name: library.name
                 };
             }
         }
@@ -372,7 +476,7 @@ function createTitleTranslator(rootURI) {
         return null;
     }
 
-    function libraryIsEditable(context) {
+    function scopeIsEditable(context) {
         if (!context?.library) {
             return false;
         }
@@ -381,6 +485,24 @@ function createTitleTranslator(rootURI) {
             && context.library.editable !== false
             && context.row?.editable !== false
         );
+    }
+
+    function scopeMenuLabel(context, busyLabel = false) {
+        if (busyLabel) {
+            return context?.type === "collection"
+                ? "正在翻译所选分类标题…"
+                : "正在翻译文献库标题…";
+        }
+
+        return context?.type === "collection"
+            ? "翻译此分类中的未翻译标题"
+            : "翻译整个文献库中的未翻译标题";
+    }
+
+    function scopeDescription(context) {
+        return context?.type === "collection"
+            ? `分类“${context.name}”`
+            : `文献库“${context.name}”`;
     }
 
     function updateItemMenuState(window) {
@@ -401,17 +523,15 @@ function createTitleTranslator(rootURI) {
         const state = windowState.get(window);
         if (!state) return;
 
-        const context = selectedLibraryContext(window);
-        const enabled = Boolean(context && libraryIsEditable(context));
+        const context = selectedScopeContext(window);
+        const enabled = Boolean(context && scopeIsEditable(context));
 
         if (state.fallbackLibraryNode) {
             state.fallbackLibraryNode.hidden = !context;
             state.fallbackLibraryNode.disabled = busy || !enabled;
             state.fallbackLibraryNode.setAttribute(
                 "label",
-                busy
-                    ? "正在翻译文献库标题…"
-                    : "翻译所属文献库全部未翻译标题"
+                scopeMenuLabel(context, busy)
             );
         }
 
@@ -419,9 +539,17 @@ function createTitleTranslator(rootURI) {
             state.fallbackToolsNode.disabled = busy || !enabled;
             state.fallbackToolsNode.setAttribute(
                 "label",
-                busy
-                    ? "正在翻译文献库标题…"
-                    : "翻译当前文献库全部未翻译标题"
+                context?.type === "collection"
+                    ? (
+                        busy
+                            ? "正在翻译当前分类标题…"
+                            : "翻译当前分类中的未翻译标题"
+                    )
+                    : (
+                        busy
+                            ? "正在翻译当前文献库标题…"
+                            : "翻译当前文献库中的未翻译标题"
+                    )
             );
         }
     }
@@ -593,109 +721,131 @@ function createTitleTranslator(rootURI) {
         }
     }
 
-    function requireConfigured(window, fields, message) {
+    function firstMissingPreference(fields) {
         for (const field of fields) {
             if (!String(pref(field, "")).trim()) {
-                alert(window, "标题翻译", message);
-                return false;
+                return field;
             }
         }
-        return true;
+        return "";
+    }
+
+    function translationConfigurationError(
+        provider = currentProvider()
+    ) {
+        const configurations = {
+            mymemory: {
+                fields: ["sourceLanguageCode"],
+                message:
+                    "MyMemory 需要源语言代码，例如英文使用 en。"
+            },
+            google: {
+                fields: ["googleApiKey"],
+                message:
+                    "请填写 Google Cloud Translation API Key。"
+            },
+            deepl: {
+                fields: ["deeplApiKey"],
+                message: "请填写 DeepL API Key。"
+            },
+            microsoft: {
+                fields: [
+                    "microsoftApiKey",
+                    "microsoftEndpoint"
+                ],
+                message:
+                    "请填写 Microsoft Translator Key 和 Endpoint。"
+            },
+            libretranslate: {
+                fields: ["libreTranslateURL"],
+                message:
+                    "请填写 LibreTranslate 服务地址。"
+            },
+            ollama: {
+                fields: ["ollamaURL", "ollamaModel"],
+                message:
+                    "请填写 Ollama 地址和模型名称。"
+            },
+            qwen: {
+                fields: [
+                    "qwenApiKey",
+                    "qwenBaseURL",
+                    "qwenModel"
+                ],
+                message:
+                    "请填写 Qwen-MT API Key、Base URL 和模型。"
+            },
+            siliconflow: {
+                fields: [
+                    "siliconflowApiKey",
+                    "siliconflowBaseURL",
+                    "siliconflowModel"
+                ],
+                message:
+                    "请填写 SiliconFlow API Key、Base URL 和模型。"
+            },
+            volcengine: {
+                fields: [
+                    "volcengineApiKey",
+                    "volcengineBaseURL",
+                    "volcengineModel"
+                ],
+                message:
+                    "请填写火山方舟 API Key、Base URL 和模型或接入点 ID。"
+            },
+            deepseek: {
+                fields: [
+                    "deepseekApiKey",
+                    "deepseekBaseURL",
+                    "deepseekModel"
+                ],
+                message:
+                    "请填写 DeepSeek API Key、Base URL 和模型。"
+            },
+            gemini: {
+                fields: [
+                    "geminiApiKey",
+                    "geminiBaseURL",
+                    "geminiModel"
+                ],
+                message:
+                    "请填写 Gemini API Key、Base URL 和模型。"
+            },
+            openai: {
+                fields: [
+                    "openaiApiKey",
+                    "openaiBaseURL",
+                    "openaiModel"
+                ],
+                message:
+                    "请填写 OpenAI API Key、Base URL 和模型。"
+            },
+            custom: {
+                fields: ["customBaseURL", "customModel"],
+                message:
+                    "请填写自定义 Base URL 和模型；"
+                    + "需要鉴权时再填写 API Key。"
+            }
+        };
+
+        const configuration = configurations[provider];
+        if (!configuration) {
+            return "未知翻译服务。";
+        }
+
+        return firstMissingPreference(configuration.fields)
+            ? configuration.message
+            : "";
     }
 
     function validateTranslationConfig(window) {
-        const provider = currentProvider();
-
-        switch (provider) {
-            case "mymemory":
-                return requireConfigured(
-                    window,
-                    ["sourceLanguageCode"],
-                    "MyMemory 需要源语言代码，例如英文使用 en。"
-                );
-            case "google":
-                return requireConfigured(
-                    window,
-                    ["googleApiKey"],
-                    "请填写 Google Cloud Translation API Key。"
-                );
-            case "deepl":
-                return requireConfigured(
-                    window,
-                    ["deeplApiKey"],
-                    "请填写 DeepL API Key。"
-                );
-            case "microsoft":
-                return requireConfigured(
-                    window,
-                    ["microsoftApiKey", "microsoftEndpoint"],
-                    "请填写 Microsoft Translator Key 和 Endpoint。"
-                );
-            case "libretranslate":
-                return requireConfigured(
-                    window,
-                    ["libreTranslateURL"],
-                    "请填写 LibreTranslate 服务地址。"
-                );
-            case "ollama":
-                return requireConfigured(
-                    window,
-                    ["ollamaURL", "ollamaModel"],
-                    "请填写 Ollama 地址和模型名称。"
-                );
-            case "qwen":
-                return requireConfigured(
-                    window,
-                    ["qwenApiKey", "qwenBaseURL", "qwenModel"],
-                    "请填写 Qwen-MT API Key、Base URL 和模型。"
-                );
-            case "siliconflow":
-                return requireConfigured(
-                    window,
-                    [
-                        "siliconflowApiKey",
-                        "siliconflowBaseURL",
-                        "siliconflowModel"
-                    ],
-                    "请填写 SiliconFlow API Key、Base URL 和模型。"
-                );
-            case "volcengine":
-                return requireConfigured(
-                    window,
-                    [
-                        "volcengineApiKey",
-                        "volcengineBaseURL",
-                        "volcengineModel"
-                    ],
-                    "请填写火山方舟 API Key、Base URL 和模型或接入点 ID。"
-                );
-            case "deepseek":
-                return requireConfigured(
-                    window,
-                    ["deepseekApiKey", "deepseekBaseURL", "deepseekModel"],
-                    "请填写 DeepSeek API Key、Base URL 和模型。"
-                );
-            case "gemini":
-                return requireConfigured(
-                    window,
-                    ["geminiApiKey", "geminiBaseURL", "geminiModel"],
-                    "请填写 Gemini API Key、Base URL 和模型。"
-                );
-            case "openai":
-                return requireConfigured(
-                    window,
-                    ["openaiApiKey", "openaiBaseURL", "openaiModel"],
-                    "请填写 OpenAI API Key、Base URL 和模型。"
-                );
-            case "custom":
-                return requireConfigured(
-                    window,
-                    ["customBaseURL", "customModel"],
-                    "请填写自定义 Base URL 和模型；需要鉴权时再填写 API Key。"
-                );
-            default:
-                return false;
+        const message = translationConfigurationError();
+        if (!message) {
+            return true;
         }
+
+        alert(window, "标题翻译", message);
+        return false;
     }
 
     function parseJSONResponse(xhr) {
@@ -1093,6 +1243,181 @@ function createTitleTranslator(rootURI) {
         };
     }
 
+    function autoTranslateEnabled() {
+        return Boolean(pref("autoTranslateOnAdd", false));
+    }
+
+    function autoTranslateDelayMs() {
+        const seconds = Number(
+            pref("autoTranslateDelaySeconds", 3)
+        );
+        const safeSeconds = Number.isFinite(seconds)
+            ? Math.min(30, Math.max(1, seconds))
+            : 3;
+        return safeSeconds * 1000;
+    }
+
+    function queueAutomaticTranslation(ids) {
+        if (!pluginActive || !autoTranslateEnabled()) {
+            return;
+        }
+
+        for (const id of ids || []) {
+            const numericID = Number(id);
+            if (Number.isInteger(numericID) && numericID > 0) {
+                autoTranslatePendingIDs.add(numericID);
+            }
+        }
+
+        if (!autoTranslatePendingIDs.size) {
+            return;
+        }
+
+        const generation = ++autoTranslateScheduleGeneration;
+        Zotero.Promise.delay(autoTranslateDelayMs())
+            .then(() => {
+                if (
+                    !pluginActive
+                    || generation !== autoTranslateScheduleGeneration
+                ) {
+                    return;
+                }
+                return processAutomaticTranslationQueue();
+            })
+            .catch(logError);
+    }
+
+    function schedulePendingAutomaticTranslation() {
+        if (
+            pluginActive
+            && autoTranslateEnabled()
+            && autoTranslatePendingIDs.size
+        ) {
+            queueAutomaticTranslation([]);
+        }
+    }
+
+    async function processAutomaticTranslationQueue() {
+        if (!pluginActive || !autoTranslateEnabled()) {
+            autoTranslatePendingIDs.clear();
+            return;
+        }
+
+        if (autoTranslateRunning || busy) {
+            schedulePendingAutomaticTranslation();
+            return;
+        }
+
+        const ids = Array.from(autoTranslatePendingIDs);
+        autoTranslatePendingIDs.clear();
+        if (!ids.length) {
+            return;
+        }
+
+        autoTranslateRunning = true;
+
+        try {
+            const configurationError =
+                translationConfigurationError();
+
+            if (configurationError) {
+                log(
+                    "自动翻译已跳过："
+                    + configurationError
+                );
+
+                if (
+                    configurationError
+                    !== lastAutoTranslateConfigError
+                ) {
+                    lastAutoTranslateConfigError =
+                        configurationError;
+                    showSilentNotification(
+                        Zotero.getMainWindow(),
+                        "自动翻译未执行",
+                        [
+                            configurationError,
+                            "请在“设置 → 标题翻译”中完成配置。"
+                        ]
+                    );
+                }
+                return;
+            }
+
+            lastAutoTranslateConfigError = "";
+
+            const loaded = await Zotero.Items.getAsync(ids);
+            const items = (
+                Array.isArray(loaded) ? loaded : [loaded]
+            ).filter(isEditableRegularItem);
+
+            if (!items.length) {
+                return;
+            }
+
+            const classified = classifyItems(items, false);
+
+            // 中文、空标题或已有译题不需要产生提示。
+            if (!classified.workItems.length) {
+                return;
+            }
+
+            await executeTranslationBatch(
+                Zotero.getMainWindow(),
+                classified,
+                `自动翻译 ${classified.workItems.length} 个新导入条目`
+            );
+        }
+        catch (error) {
+            logError(error);
+        }
+        finally {
+            autoTranslateRunning = false;
+            schedulePendingAutomaticTranslation();
+        }
+    }
+
+    const automaticTranslationObserver = {
+        notify(event, type, ids, extraData) {
+            if (
+                event !== "add"
+                || type !== "item"
+                || !autoTranslateEnabled()
+            ) {
+                return;
+            }
+
+            queueAutomaticTranslation(ids);
+        }
+    };
+
+    function registerAutomaticTranslationObserver() {
+        if (notifierObserverID) {
+            return;
+        }
+
+        notifierObserverID = Zotero.Notifier.registerObserver(
+            automaticTranslationObserver,
+            ["item"],
+            "zotero-title-translator-auto-translation"
+        );
+
+        log(
+            `已注册自动翻译观察器：${notifierObserverID}`
+        );
+    }
+
+    function unregisterAutomaticTranslationObserver() {
+        if (!notifierObserverID) {
+            return;
+        }
+
+        Zotero.Notifier.unregisterObserver(
+            notifierObserverID
+        );
+        notifierObserverID = null;
+    }
+
     async function executeTranslationBatch(
         window,
         classified,
@@ -1236,48 +1561,72 @@ function createTitleTranslator(rootURI) {
         );
     }
 
-    async function translateLibrary(window, libraryID) {
+    async function getScopeRegularItems(context) {
+        if (context.type === "collection") {
+            const childItems = await Promise.resolve(
+                context.collection.getChildItems()
+            );
+            return childItems.filter(
+                item => item && item.isRegularItem() && !item.deleted
+            );
+        }
+
+        const allTopLevelItems = await Zotero.Items.getAll(
+            context.libraryID,
+            true,
+            false
+        );
+        return allTopLevelItems.filter(
+            item => item && item.isRegularItem() && !item.deleted
+        );
+    }
+
+    async function translateScope(window, context) {
         if (busy) return;
 
-        const library = Zotero.Libraries.get(Number(libraryID));
-        if (!library) {
-            alert(window, "标题翻译", "无法读取所选文献库。");
+        if (!context?.library) {
+            alert(window, "标题翻译", "无法读取所选分类或文献库。");
             return;
         }
-        if (library.archived || library.editable === false) {
+        if (!scopeIsEditable(context)) {
             alert(
                 window,
                 "标题翻译",
-                `文献库“${library.name}”不可编辑。`
+                `${scopeDescription(context)}不可编辑。`
             );
             return;
         }
         if (!validateTranslationConfig(window)) return;
 
-        const allTopLevelItems = await Zotero.Items.getAll(
-            library.libraryID,
-            true,
-            false
-        );
-        const regularItems = allTopLevelItems.filter(
-            item => item && item.isRegularItem() && !item.deleted
-        );
+        const regularItems = await getScopeRegularItems(context);
         const classified = classifyItems(regularItems, false);
+        const description = scopeDescription(context);
 
         if (!classified.workItems.length) {
             await executeTranslationBatch(
                 window,
                 classified,
-                `文献库“${library.name}”`
+                description
             );
             return;
         }
 
+        const collectionNotice = context.type === "collection"
+            ? (
+                "仅处理该分类直接包含的条目；"
+                + "不会处理其子分类中的条目。\n"
+            )
+            : "";
+
         const confirmed = confirm(
             window,
-            "翻译整个文献库",
-            `文献库“${library.name}”共有 `
-            + `${regularItems.length} 个普通文献条目。\n\n`
+            context.type === "collection"
+                ? "翻译所选分类"
+                : "翻译整个文献库",
+            `${description}共有 `
+            + `${regularItems.length} 个普通文献条目。\n`
+            + collectionNotice
+            + "\n"
             + `本次需要调用翻译服务：`
             + `${classified.workItems.length} 个\n`
             + `已有译题，将跳过：`
@@ -1296,21 +1645,22 @@ function createTitleTranslator(rootURI) {
         await executeTranslationBatch(
             window,
             classified,
-            `文献库“${library.name}”`
+            description
         );
     }
 
-    async function translateCurrentLibrary(window) {
-        const context = selectedLibraryContext(window);
+    async function translateCurrentScope(window) {
+        const context = selectedScopeContext(window);
         if (!context) {
             alert(
                 window,
                 "标题翻译",
-                "无法确定当前文献库。请先在左侧选择一个文献库或分类。"
+                "无法确定当前分类或文献库。"
+                + "请先在左侧选择一个实际分类或文献库根节点。"
             );
             return;
         }
-        await translateLibrary(window, context.libraryID);
+        await translateScope(window, context);
     }
 
     async function clearSelected(window) {
@@ -1370,27 +1720,21 @@ function createTitleTranslator(rootURI) {
                                     ? [context.collectionTreeRow]
                                     : []
                             );
-                        const libraryID =
-                            rows.length === 1
-                                ? getRowLibraryID(rows[0])
-                                : null;
+                        const window =
+                            context.menuElem?.ownerGlobal
+                            || event.currentTarget?.ownerGlobal
+                            || Zotero.getMainWindow();
+                        const scope = scopeFromRows(window, rows);
 
-                        context.setVisible(Boolean(libraryID));
-                        if (!libraryID) return;
+                        context.setVisible(Boolean(scope));
+                        if (!scope) return;
 
-                        const library = Zotero.Libraries.get(libraryID);
-                        const editable =
-                            library
-                            && !library.archived
-                            && library.editable !== false
-                            && rows[0]?.editable !== false;
-
-                        context.setEnabled(!busy && editable);
+                        context.setEnabled(
+                            !busy && scopeIsEditable(scope)
+                        );
                         context.menuElem?.setAttribute(
                             "label",
-                            busy
-                                ? "正在翻译文献库标题…"
-                                : "翻译所属文献库全部未翻译标题"
+                            scopeMenuLabel(scope, busy)
                         );
                     },
                     onCommand(event, context) {
@@ -1401,24 +1745,21 @@ function createTitleTranslator(rootURI) {
                                     ? [context.collectionTreeRow]
                                     : []
                             );
-                        const libraryID =
-                            rows.length === 1
-                                ? getRowLibraryID(rows[0])
-                                : null;
                         const window =
                             context.menuElem?.ownerGlobal
                             || event.currentTarget?.ownerGlobal
                             || Zotero.getMainWindow();
+                        const scope = scopeFromRows(window, rows);
 
-                        if (!libraryID) {
+                        if (!scope) {
                             alert(
                                 window,
                                 "标题翻译",
-                                "无法确定所选文献库。"
+                                "无法确定所选分类或文献库。"
                             );
                             return;
                         }
-                        translateLibrary(window, libraryID).catch(logError);
+                        translateScope(window, scope).catch(logError);
                     }
                 }
             ]
@@ -1439,18 +1780,26 @@ function createTitleTranslator(rootURI) {
                             || event.currentTarget?.ownerGlobal
                             || Zotero.getMainWindow();
                         const libraryContext =
-                            selectedLibraryContext(window);
+                            selectedScopeContext(window);
 
                         context.setEnabled(
                             !busy
                             && Boolean(libraryContext)
-                            && libraryIsEditable(libraryContext)
+                            && scopeIsEditable(libraryContext)
                         );
                         context.menuElem?.setAttribute(
                             "label",
-                            busy
-                                ? "正在翻译文献库标题…"
-                                : "翻译当前文献库全部未翻译标题"
+                            libraryContext?.type === "collection"
+                                ? (
+                                    busy
+                                        ? "正在翻译当前分类标题…"
+                                        : "翻译当前分类中的未翻译标题"
+                                )
+                                : (
+                                    busy
+                                        ? "正在翻译当前文献库标题…"
+                                        : "翻译当前文献库中的未翻译标题"
+                                )
                         );
                     },
                     onCommand(event, context) {
@@ -1458,7 +1807,7 @@ function createTitleTranslator(rootURI) {
                             context.menuElem?.ownerGlobal
                             || event.currentTarget?.ownerGlobal
                             || Zotero.getMainWindow();
-                        translateCurrentLibrary(window).catch(logError);
+                        translateCurrentScope(window).catch(logError);
                     }
                 }
             ]
@@ -1502,8 +1851,8 @@ function createTitleTranslator(rootURI) {
             fallbackLibraryNode = createMenuItem(
                 document,
                 "ztt-translate-library-titles-fallback",
-                "翻译所属文献库全部未翻译标题",
-                () => translateCurrentLibrary(window).catch(logError),
+                "翻译此分类或文献库中的未翻译标题",
+                () => translateCurrentScope(window).catch(logError),
                 menuIconURI
             );
             collectionPopup.appendChild(fallbackLibraryNode);
@@ -1513,8 +1862,8 @@ function createTitleTranslator(rootURI) {
             fallbackToolsNode = createMenuItem(
                 document,
                 "ztt-translate-current-library-fallback",
-                "翻译当前文献库全部未翻译标题",
-                () => translateCurrentLibrary(window).catch(logError),
+                "翻译当前分类或文献库中的未翻译标题",
+                () => translateCurrentScope(window).catch(logError),
                 menuIconURI
             );
             fallbackToolsNode.classList.add("menu-type-library");
@@ -1689,6 +2038,7 @@ function createTitleTranslator(rootURI) {
         });
 
         registerOfficialMenus();
+        registerAutomaticTranslationObserver();
 
         log(
             `插件已启动；column=${registeredColumnKey}; `
@@ -1698,6 +2048,11 @@ function createTitleTranslator(rootURI) {
     }
 
     async function shutdown() {
+        pluginActive = false;
+        autoTranslateScheduleGeneration++;
+        autoTranslatePendingIDs.clear();
+        unregisterAutomaticTranslationObserver();
+
         for (const window of Array.from(windowState.keys())) {
             onMainWindowUnload(window);
         }
@@ -1726,8 +2081,8 @@ function createTitleTranslator(rootURI) {
         onMainWindowLoad,
         onMainWindowUnload,
         translateSelected,
-        translateLibrary,
-        translateCurrentLibrary,
+        translateScope,
+        translateCurrentScope,
         clearSelected
     };
 }

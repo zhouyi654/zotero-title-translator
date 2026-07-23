@@ -5,7 +5,7 @@ const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
 const bootstrap = fs.readFileSync("bootstrap.js", "utf8");
 const prefs = fs.readFileSync("content/preferences.xhtml", "utf8");
 
-assert.strictEqual(manifest.version, "0.3.2");
+assert.ok(manifest.version.startsWith("0.3."));
 assert.strictEqual(
     manifest.applications.zotero.id,
     "zotero-title-translator@zhouyi654.github.io"

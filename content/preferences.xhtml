@@ -416,6 +416,42 @@
     </details>
 
     <section>
+        <h2>自动翻译新导入文献</h2>
+        <div class="ztt-grid">
+            <label for="ztt-auto-translate-on-add">
+                导入文献后自动翻译标题
+            </label>
+            <input
+                id="ztt-auto-translate-on-add"
+                type="checkbox"
+                preference="extensions.zotero.titleTranslator.autoTranslateOnAdd"
+            />
+
+            <label for="ztt-auto-translate-delay-seconds">
+                导入后等待时间（秒）
+            </label>
+            <input
+                id="ztt-auto-translate-delay-seconds"
+                type="number"
+                min="1"
+                max="30"
+                step="1"
+                preference="extensions.zotero.titleTranslator.autoTranslateDelaySeconds"
+            />
+        </div>
+        <p class="ztt-help">
+            默认关闭。启用后，Zotero 新增普通文献条目时会自动加入翻译队列，
+            包括浏览器连接器、RIS/BibTeX 导入、通过 DOI/PMID 添加、PDF 元数据识别，
+            以及同步到本机的新条目。短时间内新增的条目会合并处理，不逐篇弹出确认框。
+        </p>
+        <p class="ztt-warning">
+            自动翻译只处理启用后新增的普通文献，仍会跳过中文标题、已有译题、
+            空标题、附件、笔记、批注和不可编辑条目。远程服务可能产生费用或消耗
+            免费额度；启用前请先完成服务配置，并用少量文献测试。
+        </p>
+    </section>
+
+    <section>
         <h2>完成通知</h2>
         <div class="ztt-grid">
             <label for="ztt-show-completion-notification">
