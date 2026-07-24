@@ -1,42 +1,49 @@
-# Security Policy
+# 安全策略
 
-## Supported versions
+## 支持范围
 
-Security fixes are provided for the latest published release.
+安全修复优先应用于最新发布版本。
 
-## Reporting a vulnerability
+## 报告安全问题
 
-Do not include API keys, private titles, Zotero profiles or other secrets in a public
-issue. Use GitHub's private vulnerability reporting feature for this repository when
-available.
+不要在公开 Issue 中提交：
 
-Repository: https://github.com/zhouyi654/zotero-title-translator
+- API Key；
+- 私人文献标题；
+- Zotero profile；
+- 未脱敏日志；
+- 私有数据库导出；
+- 发布签名密钥。
 
-Include:
+建议使用 GitHub 仓库的私密漏洞报告功能。报告应包含：
 
-- affected plugin version;
-- Zotero version and operating system;
-- minimal reproduction steps;
-- the affected component;
-- impact assessment;
-- sanitized logs.
+- 插件版本；
+- Zotero 版本；
+- 操作系统；
+- 最小复现步骤；
+- 受影响组件；
+- 可能影响；
+- 脱敏日志。
 
-## Credential handling
+## 已知限制
 
-The current release stores API keys in local Zotero preferences without extra
-encryption. This is a known limitation. Users should use restricted, revocable keys.
+当前版本把 API Key 保存到本机 Zotero 首选项，没有额外加密。用户应使用低权限、可撤销密钥。
 
-A future major update may migrate credentials to Mozilla Login Manager. Such a migration
-must preserve existing users' settings and delete plaintext values only after successful
-verification.
+未来若迁移到 Mozilla Login Manager，应：
 
-## Secret hygiene for contributors
+1. 检测旧首选项密钥；
+2. 写入凭据管理器；
+3. 验证写入成功；
+4. 再删除明文首选项；
+5. 保证升级用户配置不丢失。
 
-Never commit:
+## 贡献者密钥安全
 
-- real API keys;
-- `.env` files;
-- Zotero profile files;
-- debug logs containing credentials;
-- private library exports;
-- release signing keys.
+禁止提交：
+
+- `.env`；
+- 真实 API Key；
+- Zotero profile；
+- 私人文献库；
+- 包含凭据的日志；
+- 私钥或证书。

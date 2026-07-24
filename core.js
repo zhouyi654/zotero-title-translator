@@ -53,6 +53,644 @@
             .trim();
     }
 
+
+    function terminologyDelimiter(line) {
+        const arrowIndex = line.indexOf("=>");
+        if (arrowIndex > 0) {
+            return {
+                index: arrowIndex,
+                length: 2
+            };
+        }
+
+        const equalIndex = line.indexOf("=");
+        if (equalIndex > 0) {
+            return {
+                index: equalIndex,
+                length: 1
+            };
+        }
+
+        return null;
+    }
+
+    function normalizeTerminologyAliases(value) {
+        const rawValues = Array.isArray(value)
+            ? value
+            : String(value ?? "").split(/[|;；]/);
+
+        return Array.from(new Set(
+            rawValues
+                .map(normalizeOneLine)
+                .filter(Boolean)
+        ));
+    }
+
+    function normalizeTerminologyEntry(
+        sourceValue,
+        targetValue,
+        aliasesValue = []
+    ) {
+        const source = normalizeOneLine(sourceValue);
+        const target = normalizeOneLine(targetValue);
+        if (!source || !target) {
+            return null;
+        }
+
+        const aliases = normalizeTerminologyAliases(
+            aliasesValue
+        ).filter(alias => alias !== target);
+
+        return {
+            source,
+            target,
+            aliases
+        };
+    }
+
+    function mergeTerminologyEntries(
+        existingEntries,
+        importedEntries
+    ) {
+        const bySource = new Map();
+
+        for (const entry of [
+            ...(existingEntries || []),
+            ...(importedEntries || [])
+        ]) {
+            const normalized = normalizeTerminologyEntry(
+                entry?.source,
+                entry?.target,
+                entry?.aliases
+            );
+            if (!normalized) {
+                continue;
+            }
+            bySource.set(
+                normalized.source.toLocaleLowerCase(),
+                normalized
+            );
+        }
+
+        return Array.from(bySource.values());
+    }
+
+    function parseTerminology(value) {
+        const entries = [];
+
+        for (const rawLine of String(value ?? "").split(/\r?\n/)) {
+            const line = rawLine.trim();
+            if (!line || line.startsWith("#")) {
+                continue;
+            }
+
+            const delimiter = terminologyDelimiter(line);
+            if (!delimiter) {
+                continue;
+            }
+
+            const source = line.slice(0, delimiter.index);
+            const rightParts = line
+                .slice(delimiter.index + delimiter.length)
+                .split("|");
+            const target = rightParts.shift() || "";
+            const normalized = normalizeTerminologyEntry(
+                source,
+                target,
+                rightParts
+            );
+            if (normalized) {
+                entries.push(normalized);
+            }
+        }
+
+        return mergeTerminologyEntries([], entries);
+    }
+
+    function formatTerminology(entries) {
+        return mergeTerminologyEntries([], entries)
+            .map(entry => {
+                const aliases = entry.aliases.length
+                    ? ` | ${entry.aliases.join(" | ")}`
+                    : "";
+                return `${entry.source} = ${entry.target}${aliases}`;
+            })
+            .join("\n");
+    }
+
+    function normalizeTerminologyText(value) {
+        return String(value ?? "")
+            .split(/\r?\n/)
+            .map(rawLine => {
+                const line = rawLine.trim();
+                if (!line || line.startsWith("#")) {
+                    return rawLine;
+                }
+
+                const entries = parseTerminology(line);
+                if (!entries.length) {
+                    return rawLine;
+                }
+                return formatTerminology(entries);
+            })
+            .join("\n");
+    }
+
+    function parseDelimitedRows(value, delimiter) {
+        const rows = [];
+        let row = [];
+        let field = "";
+        let inQuotes = false;
+        const text = String(value ?? "").replace(/^\uFEFF/, "");
+
+        for (let index = 0; index < text.length; index++) {
+            const character = text[index];
+
+            if (inQuotes) {
+                if (
+                    character === '"'
+                    && text[index + 1] === '"'
+                ) {
+                    field += '"';
+                    index++;
+                }
+                else if (character === '"') {
+                    inQuotes = false;
+                }
+                else {
+                    field += character;
+                }
+                continue;
+            }
+
+            if (character === '"') {
+                inQuotes = true;
+            }
+            else if (character === delimiter) {
+                row.push(field);
+                field = "";
+            }
+            else if (character === "\n") {
+                row.push(field.replace(/\r$/, ""));
+                rows.push(row);
+                row = [];
+                field = "";
+            }
+            else {
+                field += character;
+            }
+        }
+
+        row.push(field.replace(/\r$/, ""));
+        if (
+            row.some(value => String(value).length)
+            || rows.length === 0
+        ) {
+            rows.push(row);
+        }
+
+        return rows;
+    }
+
+    function normalizedHeader(value) {
+        return normalizeOneLine(value)
+            .toLocaleLowerCase()
+            .replace(/[\s_-]+/g, "");
+    }
+
+    function terminologyColumnIndexes(headerRow) {
+        const sourceNames = new Set([
+            "source",
+            "sourceterm",
+            "term",
+            "english",
+            "en",
+            "原文",
+            "源术语",
+            "外文术语",
+            "英文术语"
+        ]);
+        const targetNames = new Set([
+            "target",
+            "targetterm",
+            "translation",
+            "chinese",
+            "zh",
+            "译文",
+            "标准译法",
+            "中文译法",
+            "目标术语"
+        ]);
+        const aliasNames = new Set([
+            "alias",
+            "aliases",
+            "alternative",
+            "alternatives",
+            "variant",
+            "variants",
+            "wrongtranslation",
+            "wrongtranslations",
+            "错误译法",
+            "旧译法",
+            "别名",
+            "替代译法"
+        ]);
+
+        let sourceIndex = -1;
+        let targetIndex = -1;
+        const aliasIndexes = [];
+
+        headerRow.forEach((value, index) => {
+            const normalized = normalizedHeader(value);
+            if (sourceNames.has(normalized)) {
+                sourceIndex = index;
+            }
+            else if (targetNames.has(normalized)) {
+                targetIndex = index;
+            }
+            else if (aliasNames.has(normalized)) {
+                aliasIndexes.push(index);
+            }
+        });
+
+        return {
+            isHeader: sourceIndex >= 0 && targetIndex >= 0,
+            sourceIndex,
+            targetIndex,
+            aliasIndexes
+        };
+    }
+
+    function parseDelimitedTerminology(value, delimiter) {
+        const rows = parseDelimitedRows(value, delimiter)
+            .filter(row => row.some(
+                cell => normalizeOneLine(cell)
+            ));
+
+        if (!rows.length) {
+            return [];
+        }
+
+        const indexes = terminologyColumnIndexes(rows[0]);
+        const dataRows = indexes.isHeader
+            ? rows.slice(1)
+            : rows;
+        const sourceIndex = indexes.isHeader
+            ? indexes.sourceIndex
+            : 0;
+        const targetIndex = indexes.isHeader
+            ? indexes.targetIndex
+            : 1;
+
+        const entries = [];
+        for (const row of dataRows) {
+            if (
+                normalizeOneLine(row[0]).startsWith("#")
+                || row.length < 2
+            ) {
+                continue;
+            }
+
+            let aliasCells;
+            if (indexes.isHeader && indexes.aliasIndexes.length) {
+                aliasCells = indexes.aliasIndexes.map(
+                    index => row[index]
+                );
+            }
+            else {
+                aliasCells = row.filter(
+                    (_value, index) => (
+                        index !== sourceIndex
+                        && index !== targetIndex
+                    )
+                );
+            }
+
+            const normalized = normalizeTerminologyEntry(
+                row[sourceIndex],
+                row[targetIndex],
+                aliasCells.flatMap(
+                    value => normalizeTerminologyAliases(value)
+                )
+            );
+            if (normalized) {
+                entries.push(normalized);
+            }
+        }
+
+        return mergeTerminologyEntries([], entries);
+    }
+
+    function firstDefinedValue(object, names) {
+        for (const name of names) {
+            if (
+                Object.prototype.hasOwnProperty.call(
+                    object,
+                    name
+                )
+                && object[name] !== undefined
+                && object[name] !== null
+            ) {
+                return object[name];
+            }
+        }
+        return undefined;
+    }
+
+    function terminologyEntryFromObject(value, sourceHint = "") {
+        if (typeof value === "string") {
+            return normalizeTerminologyEntry(
+                sourceHint,
+                value,
+                []
+            );
+        }
+        if (!value || typeof value !== "object") {
+            return null;
+        }
+
+        const source = firstDefinedValue(value, [
+            "source",
+            "sourceTerm",
+            "term",
+            "english",
+            "en",
+            "源术语",
+            "原文"
+        ]) ?? sourceHint;
+
+        const target = firstDefinedValue(value, [
+            "target",
+            "targetTerm",
+            "translation",
+            "chinese",
+            "zh",
+            "标准译法",
+            "译文"
+        ]);
+
+        const aliases = firstDefinedValue(value, [
+            "aliases",
+            "alias",
+            "alternatives",
+            "variants",
+            "wrongTranslations",
+            "错误译法",
+            "旧译法",
+            "别名"
+        ]) ?? [];
+
+        return normalizeTerminologyEntry(
+            source,
+            target,
+            aliases
+        );
+    }
+
+    function parseJSONTerminology(value) {
+        const data = JSON.parse(
+            String(value ?? "").replace(/^\uFEFF/, "")
+        );
+
+        let rawEntries = data;
+        if (
+            data
+            && !Array.isArray(data)
+            && typeof data === "object"
+            && Array.isArray(data.entries)
+        ) {
+            rawEntries = data.entries;
+        }
+        else if (
+            data
+            && !Array.isArray(data)
+            && typeof data === "object"
+            && Array.isArray(data.terms)
+        ) {
+            rawEntries = data.terms;
+        }
+
+        const entries = [];
+        if (Array.isArray(rawEntries)) {
+            for (const rawEntry of rawEntries) {
+                const normalized = terminologyEntryFromObject(
+                    rawEntry
+                );
+                if (normalized) {
+                    entries.push(normalized);
+                }
+            }
+        }
+        else if (
+            rawEntries
+            && typeof rawEntries === "object"
+        ) {
+            for (const [source, rawEntry] of Object.entries(
+                rawEntries
+            )) {
+                const normalized = terminologyEntryFromObject(
+                    rawEntry,
+                    source
+                );
+                if (normalized) {
+                    entries.push(normalized);
+                }
+            }
+        }
+
+        return mergeTerminologyEntries([], entries);
+    }
+
+    function terminologyFileExtension(filename) {
+        const match = String(filename ?? "")
+            .toLocaleLowerCase()
+            .match(/\.([a-z0-9]+)$/);
+        return match ? match[1] : "";
+    }
+
+    function parseTerminologyDocument(value, filename = "") {
+        const extension = terminologyFileExtension(filename);
+        if (
+            !extension
+            || ["txt", "terms", "glossary"].includes(extension)
+        ) {
+            return parseTerminology(
+                String(value ?? "").replace(/^\uFEFF/, "")
+            );
+        }
+        if (extension === "csv") {
+            return parseDelimitedTerminology(value, ",");
+        }
+        if (extension === "tsv") {
+            return parseDelimitedTerminology(value, "\t");
+        }
+        if (extension === "json") {
+            return parseJSONTerminology(value);
+        }
+
+        throw new Error(
+            `不支持的术语文件格式：.${extension}`
+        );
+    }
+
+    function quoteDelimitedValue(value, delimiter) {
+        const text = String(value ?? "");
+        if (
+            text.includes('"')
+            || text.includes("\n")
+            || text.includes("\r")
+            || text.includes(delimiter)
+        ) {
+            return `"${text.replace(/"/g, '""')}"`;
+        }
+        return text;
+    }
+
+    function exportTerminologyDocument(
+        entries,
+        format = "txt"
+    ) {
+        const normalizedEntries =
+            mergeTerminologyEntries([], entries);
+        const normalizedFormat = String(format || "txt")
+            .toLocaleLowerCase()
+            .replace(/^\./, "");
+
+        if (
+            ["txt", "terms", "glossary"].includes(
+                normalizedFormat
+            )
+        ) {
+            const text = formatTerminology(normalizedEntries);
+            return text ? `${text}\n` : "";
+        }
+
+        if (["csv", "tsv"].includes(normalizedFormat)) {
+            const delimiter =
+                normalizedFormat === "csv" ? "," : "\t";
+            const rows = [
+                ["source", "target", "aliases"],
+                ...normalizedEntries.map(entry => [
+                    entry.source,
+                    entry.target,
+                    entry.aliases.join(" | ")
+                ])
+            ];
+            return rows
+                .map(row => row.map(
+                    value => quoteDelimitedValue(
+                        value,
+                        delimiter
+                    )
+                ).join(delimiter))
+                .join("\n") + "\n";
+        }
+
+        if (normalizedFormat === "json") {
+            return JSON.stringify(
+                normalizedEntries,
+                null,
+                2
+            ) + "\n";
+        }
+
+        throw new Error(
+            `不支持的术语导出格式：.${normalizedFormat}`
+        );
+    }
+
+
+    function latinTermRegExp(term, flags = "i") {
+        return new RegExp(
+            `(^|[^A-Za-z0-9])(${escapeRegExp(term)})(?=$|[^A-Za-z0-9])`,
+            flags
+        );
+    }
+
+    function terminologySourceOccurs(title, source) {
+        const cleanTitle = String(title ?? "");
+        const cleanSource = normalizeOneLine(source);
+        if (!cleanSource) {
+            return false;
+        }
+
+        if (/^[A-Za-z0-9][A-Za-z0-9 ._+\-\/()]*$/.test(cleanSource)) {
+            return latinTermRegExp(cleanSource).test(cleanTitle);
+        }
+
+        return cleanTitle
+            .toLocaleLowerCase()
+            .includes(cleanSource.toLocaleLowerCase());
+    }
+
+    function matchingTerminologyEntries(title, entries) {
+        return (Array.isArray(entries) ? entries : [])
+            .filter(entry => (
+                entry
+                && terminologySourceOccurs(title, entry.source)
+            ));
+    }
+
+    function terminologyInstruction(entries) {
+        const validEntries = Array.isArray(entries) ? entries : [];
+        if (!validEntries.length) {
+            return "";
+        }
+
+        const lines = validEntries.map(
+            entry => `- ${entry.source} => ${entry.target}`
+        );
+        return (
+            " Use the following mandatory terminology mappings whenever "
+            + "the source term occurs. Use the target wording exactly and "
+            + "do not substitute a synonym:\n"
+            + lines.join("\n")
+        );
+    }
+
+    function replaceTerminologyToken(text, token, replacement) {
+        const cleanToken = normalizeOneLine(token);
+        if (!cleanToken) {
+            return text;
+        }
+
+        if (/^[A-Za-z0-9][A-Za-z0-9 ._+\-\/()]*$/.test(cleanToken)) {
+            return String(text).replace(
+                latinTermRegExp(cleanToken, "gi"),
+                (match, prefix) => `${prefix}${replacement}`
+            );
+        }
+
+        return String(text).replace(
+            new RegExp(escapeRegExp(cleanToken), "gi"),
+            replacement
+        );
+    }
+
+    function applyTerminology(title, translation, entries) {
+        let output = cleanTranslation(translation);
+        const matching = matchingTerminologyEntries(title, entries);
+
+        for (const entry of matching) {
+            const replaceable = [
+                ...(entry.aliases || []),
+                entry.source
+            ]
+                .filter(Boolean)
+                .sort((a, b) => b.length - a.length);
+
+            for (const token of replaceable) {
+                output = replaceTerminologyToken(
+                    output,
+                    token,
+                    entry.target
+                );
+            }
+        }
+
+        return cleanTranslation(output);
+    }
+
     function decodeHTMLEntities(value) {
         const named = {
             amp: "&",
@@ -256,17 +894,23 @@
         return `${base}/models/${encodeURIComponent(cleanModel)}:generateContent`;
     }
 
-    function academicTranslationInstruction() {
+    function academicTranslationInstruction(terminologyEntries = []) {
         return (
             "Translate the academic publication title into Simplified Chinese. "
             + "Preserve chemical formulas, gene and protein symbols, Latin binomials, "
             + "drug names, abbreviations, units, trial names, uncertainty expressions, "
             + "and meaningful punctuation. Do not add, omit, summarize, or explain. "
             + "Return only the translated title without labels or quotation marks."
+            + terminologyInstruction(terminologyEntries)
         );
     }
 
-    function buildGenericChatPayload(model, title, extra = {}) {
+    function buildGenericChatPayload(
+        model,
+        title,
+        extra = {},
+        terminologyEntries = []
+    ) {
         const cleanModel = requireValue(model, "尚未设置模型名称。");
         const cleanTitle = normalizeOneLine(title);
         if (!cleanTitle) {
@@ -279,7 +923,7 @@
                 messages: [
                     {
                         role: "system",
-                        content: academicTranslationInstruction()
+                        content: academicTranslationInstruction(terminologyEntries)
                     },
                     {
                         role: "user",
@@ -294,7 +938,12 @@
         );
     }
 
-    function buildQwenPayload(model, title) {
+    function buildQwenPayload(
+        model,
+        title,
+        extra = {},
+        terminologyEntries = []
+    ) {
         const cleanModel = requireValue(model, "尚未设置 Qwen-MT 模型。");
         const cleanTitle = normalizeOneLine(title);
         if (!cleanTitle) {
@@ -318,11 +967,17 @@
                         + "protein symbols, chemical formulas, drug names, abbreviations, "
                         + "units, trial names, and uncertainty expressions. Return only "
                         + "the complete translated title."
+                        + terminologyInstruction(terminologyEntries)
                 }
             };
         }
 
-        return buildGenericChatPayload(cleanModel, cleanTitle);
+        return buildGenericChatPayload(
+            cleanModel,
+            cleanTitle,
+            extra,
+            terminologyEntries
+        );
     }
 
     function buildMyMemoryURL({
@@ -456,7 +1111,8 @@
         model,
         title,
         sourceLanguageName = "English",
-        sourceLanguageCode = "en"
+        sourceLanguageCode = "en",
+        terminologyEntries = []
     }) {
         const cleanModel = requireValue(model, "尚未设置 Ollama 模型。");
         const cleanTitle = normalizeOneLine(title);
@@ -476,7 +1132,7 @@
                     content:
                         `You are a professional ${sourceName} (${sourceCode}) `
                         + "to Chinese (Simplified) (zh-Hans) translator. "
-                        + academicTranslationInstruction()
+                        + academicTranslationInstruction(terminologyEntries)
                         + `\n\n\n${cleanTitle}`
                 }
             ];
@@ -485,7 +1141,7 @@
             messages = [
                 {
                     role: "system",
-                    content: academicTranslationInstruction()
+                    content: academicTranslationInstruction(terminologyEntries)
                 },
                 {
                     role: "user",
@@ -504,7 +1160,7 @@
         };
     }
 
-    function buildGeminiPayload(title) {
+    function buildGeminiPayload(title, terminologyEntries = []) {
         const cleanTitle = normalizeOneLine(title);
         if (!cleanTitle) {
             throw new Error("标题为空。");
@@ -512,7 +1168,7 @@
 
         return {
             system_instruction: {
-                parts: [{ text: academicTranslationInstruction() }]
+                parts: [{ text: academicTranslationInstruction(terminologyEntries) }]
             },
             contents: [
                 {
@@ -650,11 +1306,491 @@
         );
     }
 
+
+    function csvField(value) {
+        const text = String(value ?? "");
+        return /[",\r\n]/.test(text)
+            ? `"${text.replace(/"/g, '""')}"`
+            : text;
+    }
+
+    function buildPdf2zhGlossaryCSV(
+        entries,
+        targetLanguage = "zh-CN"
+    ) {
+        const target = normalizeOneLine(targetLanguage) || "zh-CN";
+        const normalized = mergeTerminologyEntries([], entries);
+        const rows = ["source,target,tgt_lng"];
+
+        for (const entry of normalized) {
+            rows.push([
+                csvField(entry.source),
+                csvField(entry.target),
+                csvField(target)
+            ].join(","));
+        }
+
+        return rows.join("\n") + "\n";
+    }
+
+    function tomlAssignmentRegExp(key) {
+        return new RegExp(
+            "^\\s*" + escapeRegExp(key) + "\\s*=",
+            "i"
+        );
+    }
+
+    function tomlSectionBounds(lines, sectionName) {
+        const target = String(sectionName ?? "")
+            .trim()
+            .toLocaleLowerCase();
+        let start = -1;
+        let end = lines.length;
+
+        for (let index = 0; index < lines.length; index++) {
+            const match = lines[index].match(
+                /^\s*\[([^\]]+)\]\s*(?:#.*)?$/
+            );
+            if (!match) {
+                continue;
+            }
+
+            const name = match[1]
+                .trim()
+                .toLocaleLowerCase();
+            if (start === -1 && name === target) {
+                start = index;
+                continue;
+            }
+            if (start !== -1) {
+                end = index;
+                break;
+            }
+        }
+
+        return { start, end };
+    }
+
+    function stripTomlComment(value) {
+        const text = String(value ?? "");
+        let quote = "";
+        let escaped = false;
+
+        for (let index = 0; index < text.length; index++) {
+            const character = text[index];
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (quote === '"' && character === "\\") {
+                escaped = true;
+                continue;
+            }
+            if (quote) {
+                if (character === quote) {
+                    quote = "";
+                }
+                continue;
+            }
+            if (character === '"' || character === "'") {
+                quote = character;
+                continue;
+            }
+            if (character === "#") {
+                return text.slice(0, index).trim();
+            }
+        }
+
+        return text.trim();
+    }
+
+    function parseTomlScalar(value) {
+        const text = stripTomlComment(value);
+        if (!text) {
+            return "";
+        }
+        if (text.startsWith('"') && text.endsWith('"')) {
+            try {
+                return JSON.parse(text);
+            }
+            catch (error) {
+                return text.slice(1, -1);
+            }
+        }
+        if (text.startsWith("'") && text.endsWith("'")) {
+            return text.slice(1, -1);
+        }
+        if (/^(true|false)$/i.test(text)) {
+            return text.toLocaleLowerCase() === "true";
+        }
+        return text;
+    }
+
+    function tomlString(value) {
+        return JSON.stringify(String(value ?? ""));
+    }
+
+    function findTomlAssignment(lines, bounds, key) {
+        if (bounds.start === -1) {
+            return null;
+        }
+        const matcher = tomlAssignmentRegExp(key);
+        for (
+            let index = bounds.start + 1;
+            index < bounds.end;
+            index++
+        ) {
+            if (!matcher.test(lines[index])) {
+                continue;
+            }
+            const equalIndex = lines[index].indexOf("=");
+            return {
+                index,
+                line: lines[index],
+                value: equalIndex >= 0
+                    ? parseTomlScalar(
+                        lines[index].slice(equalIndex + 1)
+                    )
+                    : ""
+            };
+        }
+        return null;
+    }
+
+    function setTomlAssignment(
+        lines,
+        sectionName,
+        key,
+        assignmentLine
+    ) {
+        let bounds = tomlSectionBounds(lines, sectionName);
+        if (bounds.start === -1) {
+            if (lines.length && lines[lines.length - 1].trim()) {
+                lines.push("");
+            }
+            lines.push(`[${sectionName}]`);
+            bounds = {
+                start: lines.length - 1,
+                end: lines.length
+            };
+        }
+
+        const existing = findTomlAssignment(lines, bounds, key);
+        if (existing) {
+            lines[existing.index] = assignmentLine;
+            return;
+        }
+        lines.splice(bounds.end, 0, assignmentLine);
+    }
+
+    function removeTomlAssignment(lines, sectionName, key) {
+        const bounds = tomlSectionBounds(lines, sectionName);
+        const existing = findTomlAssignment(lines, bounds, key);
+        if (existing) {
+            lines.splice(existing.index, 1);
+        }
+    }
+
+    function splitGlossaryPaths(value) {
+        const text = normalizeOneLine(value);
+        if (!text || /^null$/i.test(text)) {
+            return [];
+        }
+        return text
+            .split(",")
+            .map(part => part.trim())
+            .filter(Boolean);
+    }
+
+    function normalizedPathKey(value) {
+        return String(value ?? "")
+            .replace(/\\/g, "/")
+            .replace(/\/+$/g, "")
+            .toLocaleLowerCase();
+    }
+
+    function configurePdf2zhToml(
+        tomlText,
+        options = {}
+    ) {
+        const glossaryPath = normalizeOneLine(
+            options.glossaryPath
+        );
+        if (!glossaryPath) {
+            throw new Error("PDF2zh 术语文件路径为空。");
+        }
+
+        const newline = String(tomlText ?? "").includes("\r\n")
+            ? "\r\n"
+            : "\n";
+        const hadTrailingNewline = /\r?\n$/.test(
+            String(tomlText ?? "")
+        );
+        const lines = String(tomlText ?? "").split(/\r?\n/);
+        if (hadTrailingNewline && lines[lines.length - 1] === "") {
+            lines.pop();
+        }
+
+        let bounds = tomlSectionBounds(lines, "translation");
+        const glossaryAssignment = findTomlAssignment(
+            lines,
+            bounds,
+            "glossaries"
+        );
+        const autoAssignment = findTomlAssignment(
+            lines,
+            bounds,
+            "no_auto_extract_glossary"
+        );
+
+        const cacheAssignment = findTomlAssignment(
+            lines,
+            bounds,
+            "ignore_cache"
+        );
+
+        const originalAssignments = {
+            glossaries: glossaryAssignment?.line ?? null,
+            no_auto_extract_glossary:
+                autoAssignment?.line ?? null,
+            ignore_cache: cacheAssignment?.line ?? null
+        };
+
+        const mode = options.mode === "replace"
+            ? "replace"
+            : "append";
+        const existingPaths = splitGlossaryPaths(
+            glossaryAssignment?.value
+        );
+        const paths = mode === "replace"
+            ? []
+            : existingPaths.slice();
+        const glossaryKey = normalizedPathKey(glossaryPath);
+        if (!paths.some(
+            path => normalizedPathKey(path) === glossaryKey
+        )) {
+            paths.push(glossaryPath);
+        }
+
+        setTomlAssignment(
+            lines,
+            "translation",
+            "glossaries",
+            `glossaries = ${tomlString(paths.join(","))}`
+        );
+
+        const disableAutoGlossary =
+            options.disableAutoGlossary === true;
+        if (disableAutoGlossary) {
+            setTomlAssignment(
+                lines,
+                "translation",
+                "no_auto_extract_glossary",
+                "no_auto_extract_glossary = true"
+            );
+        }
+
+        const forceIgnoreCache =
+            options.forceIgnoreCache === true;
+        if (forceIgnoreCache) {
+            setTomlAssignment(
+                lines,
+                "translation",
+                "ignore_cache",
+                "ignore_cache = true"
+            );
+        }
+
+        return {
+            text: lines.join(newline)
+                + (hadTrailingNewline ? newline : ""),
+            originalAssignments,
+            changedNoAutoGlossary: disableAutoGlossary,
+            changedIgnoreCache: forceIgnoreCache,
+            glossaryPaths: paths
+        };
+    }
+
+
+    function inspectPdf2zhToml(
+        tomlText,
+        glossaryPath = ""
+    ) {
+        const lines = String(tomlText ?? "").split(/\r?\n/);
+        const bounds = tomlSectionBounds(lines, "translation");
+        const glossaryAssignment = findTomlAssignment(
+            lines,
+            bounds,
+            "glossaries"
+        );
+        const autoAssignment = findTomlAssignment(
+            lines,
+            bounds,
+            "no_auto_extract_glossary"
+        );
+        const cacheAssignment = findTomlAssignment(
+            lines,
+            bounds,
+            "ignore_cache"
+        );
+        const glossaryPaths = splitGlossaryPaths(
+            glossaryAssignment?.value
+        );
+        const managedKey = normalizedPathKey(glossaryPath);
+
+        return {
+            glossaryPaths,
+            glossaryConfigured: managedKey
+                ? glossaryPaths.some(
+                    path => normalizedPathKey(path) === managedKey
+                )
+                : glossaryPaths.length > 0,
+            noAutoExtractGlossary:
+                autoAssignment?.value === true,
+            ignoreCache:
+                cacheAssignment?.value === true
+        };
+    }
+
+    function restorePdf2zhToml(
+        tomlText,
+        bridgeState = {}
+    ) {
+        const newline = String(tomlText ?? "").includes("\r\n")
+            ? "\r\n"
+            : "\n";
+        const hadTrailingNewline = /\r?\n$/.test(
+            String(tomlText ?? "")
+        );
+        const lines = String(tomlText ?? "").split(/\r?\n/);
+        if (hadTrailingNewline && lines[lines.length - 1] === "") {
+            lines.pop();
+        }
+
+        let bounds = tomlSectionBounds(lines, "translation");
+        const glossaryAssignment = findTomlAssignment(
+            lines,
+            bounds,
+            "glossaries"
+        );
+        const managedPath = normalizeOneLine(
+            bridgeState.glossaryPath
+        );
+        const managedKey = normalizedPathKey(managedPath);
+        const remainingPaths = splitGlossaryPaths(
+            glossaryAssignment?.value
+        ).filter(
+            path => normalizedPathKey(path) !== managedKey
+        );
+
+        if (remainingPaths.length) {
+            setTomlAssignment(
+                lines,
+                "translation",
+                "glossaries",
+                `glossaries = ${tomlString(
+                    remainingPaths.join(",")
+                )}`
+            );
+        }
+        else if (
+            bridgeState.originalAssignments?.glossaries
+        ) {
+            setTomlAssignment(
+                lines,
+                "translation",
+                "glossaries",
+                bridgeState.originalAssignments.glossaries
+            );
+        }
+        else {
+            removeTomlAssignment(
+                lines,
+                "translation",
+                "glossaries"
+            );
+        }
+
+        if (bridgeState.changedNoAutoGlossary) {
+            bounds = tomlSectionBounds(lines, "translation");
+            const currentAuto = findTomlAssignment(
+                lines,
+                bounds,
+                "no_auto_extract_glossary"
+            );
+            if (currentAuto?.value === true) {
+                const original = bridgeState
+                    .originalAssignments
+                    ?.no_auto_extract_glossary;
+                if (original) {
+                    setTomlAssignment(
+                        lines,
+                        "translation",
+                        "no_auto_extract_glossary",
+                        original
+                    );
+                }
+                else {
+                    removeTomlAssignment(
+                        lines,
+                        "translation",
+                        "no_auto_extract_glossary"
+                    );
+                }
+            }
+        }
+
+        if (bridgeState.changedIgnoreCache) {
+            bounds = tomlSectionBounds(lines, "translation");
+            const currentCache = findTomlAssignment(
+                lines,
+                bounds,
+                "ignore_cache"
+            );
+            if (currentCache?.value === true) {
+                const original = bridgeState
+                    .originalAssignments
+                    ?.ignore_cache;
+                if (original) {
+                    setTomlAssignment(
+                        lines,
+                        "translation",
+                        "ignore_cache",
+                        original
+                    );
+                }
+                else {
+                    removeTomlAssignment(
+                        lines,
+                        "translation",
+                        "ignore_cache"
+                    );
+                }
+            }
+        }
+
+        return lines.join(newline)
+            + (hadTrailingNewline ? newline : "");
+    }
+
     return {
         EXTRA_KEY,
         PROVIDERS,
         normalizeProvider,
         normalizeOneLine,
+        parseTerminology,
+        formatTerminology,
+        normalizeTerminologyText,
+        mergeTerminologyEntries,
+        parseTerminologyDocument,
+        exportTerminologyDocument,
+        buildPdf2zhGlossaryCSV,
+        configurePdf2zhToml,
+        inspectPdf2zhToml,
+        restorePdf2zhToml,
+        matchingTerminologyEntries,
+        terminologyInstruction,
+        applyTerminology,
         decodeHTMLEntities,
         cleanTranslation,
         readTranslation,

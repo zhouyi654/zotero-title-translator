@@ -1,0 +1,15 @@
+[
+  {
+    "source": "cholera",
+    "target": "霍乱",
+    "aliases": []
+  },
+  {
+    "source": "case-control study",
+    "target": "病例对照研究",
+    "aliases": [
+      "病例控制研究",
+      "个案对照研究"
+    ]
+  }
+]

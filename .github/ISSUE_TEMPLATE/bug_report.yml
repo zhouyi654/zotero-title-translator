@@ -1,24 +1,28 @@
-name: Bug report
-description: Report a reproducible plugin problem
+name: Bug 报告
+description: 报告可复现的插件问题
 title: "[Bug] "
 labels: ["bug"]
 body:
   - type: input
     id: version
     attributes:
-      label: Plugin version
+      label: 插件版本
+      placeholder: 例如 0.3.6
     validations:
       required: true
+
   - type: input
     id: zotero
     attributes:
-      label: Zotero version and operating system
+      label: Zotero 版本和操作系统
+      placeholder: 例如 Zotero 9.0.6 / Windows 11
     validations:
       required: true
+
   - type: dropdown
     id: provider
     attributes:
-      label: Translation provider
+      label: 翻译服务
       options:
         - MyMemory
         - Google Cloud Translation
@@ -28,29 +32,46 @@ body:
         - Ollama
         - Qwen-MT
         - SiliconFlow
-        - Volcengine Ark
+        - 火山方舟
         - DeepSeek
         - Gemini
         - OpenAI
-        - Custom API
+        - 自定义 API
     validations:
       required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 操作类型
+      options:
+        - 单篇翻译
+        - 多篇翻译
+        - 分类翻译
+        - 整库翻译
+        - 导入后自动翻译
+        - 设置或安装
+    validations:
+      required: true
+
   - type: textarea
     id: steps
     attributes:
-      label: Steps to reproduce
+      label: 复现步骤
     validations:
       required: true
+
   - type: textarea
     id: result
     attributes:
-      label: Actual and expected result
+      label: 实际结果和预期结果
     validations:
       required: true
+
   - type: checkboxes
-    id: secrets
+    id: privacy
     attributes:
-      label: Privacy confirmation
+      label: 隐私确认
       options:
-        - label: I removed API keys, private titles and personal data from logs and screenshots.
+        - label: 我已经从日志和截图中删除 API Key、私人文献标题和个人数据。
           required: true

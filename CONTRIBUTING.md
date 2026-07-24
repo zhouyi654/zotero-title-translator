@@ -1,31 +1,44 @@
-# Contributing
+# 贡献指南
 
-Issues and pull requests are welcome.
+欢迎提交 Issue、Pull Request、翻译服务适配、测试和中文文档改进。
 
-## Requirements
+## 基本原则
 
-- Do not overwrite Zotero's original `title` field.
-- Do not add undocumented or reverse-engineered translation endpoints.
-- Do not bypass authentication, quotas, rate limits or payment controls.
-- Remote providers must be documented in `PRIVACY.md`.
-- Public free services must use conservative concurrency and retry behavior.
-- New providers require request-construction and response-parsing tests.
-- Do not commit real API keys or private Zotero data.
+1. 不覆盖 Zotero 原始 `title` 字段；
+2. 不修改 Zotero 数据库结构；
+3. 不接入通过抓包、逆向或未授权网页接口获得的翻译服务；
+4. 不绕过身份验证、配额、限流、付费墙或服务条款；
+5. 远程服务必须在文档中说明标题会发送给第三方；
+6. 公共免费服务必须采取保守并发和速率限制；
+7. 新服务商必须增加请求构造、响应解析和错误处理测试；
+8. 不提交真实 API Key、私人文献或 Zotero profile。
 
-## Local checks
+## 本地检查
 
 ```bash
 npm test
 python build_xpi.py --check
 ```
 
-## Pull requests
+## Pull Request 说明
 
-Describe:
+请写明：
 
-- the user-facing change;
-- affected providers;
-- privacy or credential implications;
-- Zotero versions tested;
-- error and rate-limit behavior;
-- tests added or updated.
+- 用户可见的变更；
+- 影响的服务商；
+- 隐私或凭据影响；
+- 测试过的 Zotero 版本；
+- 限流和重试行为；
+- 新增或修改的测试。
+
+## Bug 报告
+
+请提供：
+
+- 插件版本；
+- Zotero 版本和操作系统；
+- 当前服务；
+- 复现步骤；
+- 实际结果；
+- 预期结果；
+- 脱敏错误信息。

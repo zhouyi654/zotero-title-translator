@@ -106,3 +106,45 @@ assert.strictEqual(qwen.translation_options.target_lang, "Chinese");
 assert.ok(qwen.translation_options.domains.includes("biomedical"));
 
 console.log("All 0.3.0 core tests passed.");
+
+
+const terminology = core.parseTerminology(`
+# epidemiology
+cholera => 霍乱
+case-control study => 病例对照研究 | 病例控制研究 | 个案对照研究
+`);
+assert.strictEqual(terminology.length, 2);
+assert.strictEqual(terminology[1].target, "病例对照研究");
+assert.deepStrictEqual(
+    terminology[1].aliases,
+    ["病例控制研究", "个案对照研究"]
+);
+assert.strictEqual(
+    core.matchingTerminologyEntries(
+        "A case-control study of cholera",
+        terminology
+    ).length,
+    2
+);
+assert.strictEqual(
+    core.applyTerminology(
+        "A case-control study of cholera",
+        "胆汁病病例控制研究",
+        terminology
+    ),
+    "胆汁病病例对照研究"
+);
+const glossaryPayload = core.buildGenericChatPayload(
+    "model",
+    "A case-control study",
+    {},
+    core.matchingTerminologyEntries(
+        "A case-control study",
+        terminology
+    )
+);
+assert.ok(
+    glossaryPayload.messages[0].content.includes(
+        "case-control study => 病例对照研究"
+    )
+);

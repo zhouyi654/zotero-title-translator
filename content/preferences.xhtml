@@ -8,7 +8,8 @@
             max-width: 940px;
         }
         .ztt-grid input,
-        .ztt-grid select {
+        .ztt-grid select,
+        .ztt-grid textarea {
             width: 100%;
             box-sizing: border-box;
         }
@@ -38,6 +39,36 @@
             border: 1px solid var(--fill-quinary);
             border-radius: 6px;
             line-height: 1.5;
+        }
+        .ztt-grid textarea {
+            min-height: 150px;
+            resize: vertical;
+            font-family: monospace;
+            line-height: 1.45;
+        }
+        .ztt-action-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            max-width: 940px;
+            margin: 10px 0;
+        }
+        .ztt-action-row button {
+            min-height: 30px;
+            padding: 4px 12px;
+        }
+        #ztt-terminology-import-status,
+        #ztt-pdf2zh-bridge-status {
+            display: block;
+            min-height: 1.4em;
+            max-width: 940px;
+            margin: 6px 0;
+            color: var(--fill-secondary);
+            white-space: pre-wrap;
+        }
+        #ztt-terminology-import-status[data-error="true"],
+        #ztt-pdf2zh-bridge-status[data-error="true"] {
+            color: var(--color-red-70);
         }
         code {
             user-select: text;
@@ -414,6 +445,195 @@
             />
         </div>
     </details>
+
+    <section>
+        <h2>术语表、外部集合与译后校正</h2>
+        <div class="ztt-grid">
+            <label for="ztt-terminology-enabled">
+                启用自定义术语表
+            </label>
+            <input
+                id="ztt-terminology-enabled"
+                type="checkbox"
+                preference="extensions.zotero.titleTranslator.terminologyEnabled"
+            />
+
+            <label for="ztt-terminology-entries">
+                术语规则
+            </label>
+            <textarea
+                id="ztt-terminology-entries"
+                rows="10"
+                preference="extensions.zotero.titleTranslator.terminologyEntries"
+                placeholder="cholera = 霍乱&#10;case-control study = 病例对照研究 | 病例控制研究"
+            ></textarea>
+        </div>
+
+        <div class="ztt-action-row">
+            <button
+                id="ztt-import-terminology"
+                type="button"
+                data-search-strings-raw="术语 导入 CSV TSV JSON TXT glossary"
+            >
+                导入一个或多个术语文件…
+            </button>
+            <button
+                id="ztt-export-terminology"
+                type="button"
+            >
+                导出当前术语表…
+            </button>
+            <button
+                id="ztt-save-terminology-template"
+                type="button"
+            >
+                保存 CSV 模板…
+            </button>
+        </div>
+        <span
+            id="ztt-terminology-import-status"
+            role="status"
+            aria-live="polite"
+        ></span>
+
+        <p class="ztt-help">
+            手动规则每行一条：<code>源术语 = 标准译法</code>。可在标准译法后用
+            <code>|</code> 写出需要纠正的旧译法，例如：
+            <code>case-control study = 病例对照研究 | 病例控制研究</code>。
+            旧版 <code>=&gt;</code> 仍可读取，但保存、导入和导出统一使用
+            <code>=</code>。以 <code>#</code> 开头的行视为注释。
+        </p>
+        <p class="ztt-help">
+            可导入 UTF-8 的 TXT、CSV、TSV 和 JSON。CSV/TSV 推荐列名：
+            <code>source</code>、<code>target</code>、<code>aliases</code>；
+            没有表头时按前两列作为源术语和标准译法。Excel 文件请先另存为
+            UTF-8 CSV。可一次选择多个文件，并选择合并或替换当前术语表。
+        </p>
+        <p class="ztt-warning">
+            大模型和 Qwen-MT 会在提示词中接收命中的术语规则；所有服务都会在译后
+            将标题中仍保留的源术语及列出的错误译法替换为标准译法。导入文件中的
+            同源术语会覆盖较早规则。外部术语集合可能包含不适合当前学科或语境的
+            译法，建议先审查并用少量文献测试。
+        </p>
+    </section>
+
+    <section>
+        <h2>PDF2zh Next 全文翻译术语桥接</h2>
+        <div class="ztt-grid">
+            <label for="ztt-pdf2zh-bridge-enabled">
+                启用 PDF2zh 术语桥接
+            </label>
+            <input
+                id="ztt-pdf2zh-bridge-enabled"
+                type="checkbox"
+                preference="extensions.zotero.titleTranslator.pdf2zhBridgeEnabled"
+            />
+
+            <label for="ztt-pdf2zh-server-path">
+                PDF2zh Server 文件夹
+            </label>
+            <div class="ztt-action-row" style="margin: 0;">
+                <input
+                    id="ztt-pdf2zh-server-path"
+                    type="text"
+                    preference="extensions.zotero.titleTranslator.pdf2zhServerPath"
+                    placeholder="例如 D:\zotero-pdf2zh\server"
+                />
+                <button
+                    id="ztt-select-pdf2zh-server"
+                    type="button"
+                >
+                    选择文件夹…
+                </button>
+            </div>
+
+            <label for="ztt-pdf2zh-glossary-mode">
+                与现有术语文件的关系
+            </label>
+            <select
+                id="ztt-pdf2zh-glossary-mode"
+                preference="extensions.zotero.titleTranslator.pdf2zhGlossaryMode"
+            >
+                <option value="append">
+                    追加到 PDF2zh 已有术语文件（推荐）
+                </option>
+                <option value="replace">
+                    本次只使用标题翻译术语表
+                </option>
+            </select>
+
+            <label for="ztt-pdf2zh-disable-auto-glossary">
+                关闭 PDF2zh 自动术语提取
+            </label>
+            <input
+                id="ztt-pdf2zh-disable-auto-glossary"
+                type="checkbox"
+                preference="extensions.zotero.titleTranslator.pdf2zhDisableAutoGlossary"
+            />
+
+            <label for="ztt-pdf2zh-force-ignore-cache">
+                强制忽略旧翻译缓存
+            </label>
+            <input
+                id="ztt-pdf2zh-force-ignore-cache"
+                type="checkbox"
+                preference="extensions.zotero.titleTranslator.pdf2zhForceIgnoreCache"
+            />
+
+            <label for="ztt-pdf2zh-show-sync-notification">
+                翻译前显示桥接回执
+            </label>
+            <input
+                id="ztt-pdf2zh-show-sync-notification"
+                type="checkbox"
+                preference="extensions.zotero.titleTranslator.pdf2zhShowSyncNotification"
+            />
+        </div>
+
+        <div class="ztt-action-row">
+            <button
+                id="ztt-detect-pdf2zh-bridge"
+                type="button"
+            >
+                检测连接与配置
+            </button>
+            <button
+                id="ztt-sync-pdf2zh-glossary"
+                type="button"
+            >
+                立即同步术语
+            </button>
+            <button
+                id="ztt-restore-pdf2zh-config"
+                type="button"
+            >
+                恢复桥接前配置
+            </button>
+        </div>
+        <span
+            id="ztt-pdf2zh-bridge-status"
+            role="status"
+            aria-live="polite"
+        ></span>
+
+        <p class="ztt-help">
+            启用后，本插件只在运行时包装 PDF2zh 的“翻译 PDF”入口：翻译开始前，
+            将当前启用的标题术语表导出为 BabelDOC/PDF2zh Next 使用的 CSV，并更新
+            PDF2zh Server 的 <code>config/config.toml</code>。不会修改、替换或重新打包
+            PDF2zh 插件文件。
+        </p>
+        <p class="ztt-help">
+            可以选择包含 <code>server.py</code> 的 server 文件夹，也可以选择其项目根目录。
+            首次同步会保存 <code>config.toml.ztt-backup</code> 和桥接状态文件；恢复操作只移除
+            本插件管理的术语路径，并尽量保留 PDF2zh 后续产生的其他配置。
+        </p>
+        <p class="ztt-warning">
+            当前仅支持 PDF2zh 的 <code>pdf2zh_next</code> 引擎。重新翻译同一篇 PDF 时，
+            必须绕过旧翻译缓存，否则可能直接返回术语表启用前的错误译文。测试固定术语时，
+            建议同时勾选“关闭 PDF2zh 自动术语提取”和“强制忽略旧翻译缓存”。
+            同步失败不会阻断 PDF2zh 原来的翻译流程。
+        </p>
+    </section>
 
     <section>
         <h2>自动翻译新导入文献</h2>

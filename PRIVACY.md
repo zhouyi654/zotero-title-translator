@@ -1,45 +1,52 @@
-# Privacy
+# 隐私说明
 
-## Data processed by the plugin
+## 插件处理的数据
 
-The plugin reads the Zotero item title and, for non-Chinese titles, sends that title
-to the translation provider selected by the user.
+插件读取 Zotero 条目的标题。对于需要翻译的外文标题，插件会将标题发送给用户选择的翻译服务。
 
-The plugin does not intentionally send:
+插件不会主动发送：
 
-- PDF files;
-- annotations;
-- notes;
-- abstracts;
-- creators;
-- the full Zotero database;
-- Zotero account credentials.
+- PDF 文件；
+- 摘要；
+- 作者信息；
+- 笔记；
+- 批注；
+- 整个 Zotero 数据库；
+- Zotero 账号凭据。
 
-## Local-only options
+## 本地方案
 
-When Ollama or LibreTranslate is running on the same computer and the plugin is
-configured to use `localhost`, title text can remain on the local device.
+当 Ollama 或 LibreTranslate 在本机运行，并将地址设置为 `localhost` 时，标题可以留在当前设备。
 
-## Remote providers
+## 远程服务
 
-When a remote provider is selected, title text is transmitted to that provider.
-The provider's own privacy policy, retention rules, regional processing and account
-settings apply.
+选择远程服务时，标题会传输给相应服务商。服务商自身的隐私政策、数据保留规则、地区处理和账户设置适用。
 
-## Stored translations
+## 译题保存
 
-Translated titles are stored in the Zotero item's `Extra` field as:
+译题保存到 Zotero 条目的 `Extra` 字段：
 
 ```text
-ZoteroTitleTranslation: translated title
+ZoteroTitleTranslation: 中文译题
 ```
 
-They may therefore be included in Zotero item synchronization.
+该内容可能随 Zotero 条目同步。
 
-## API keys
+## API Key
 
-API keys are currently stored in the local Zotero preferences profile without
-additional encryption by this plugin. They are not sent to the project maintainer,
-but software or users with access to the local Zotero profile may be able to read them.
+API Key 当前保存在本机 Zotero 首选项中，没有由插件进行额外加密。
 
-Use restricted, revocable keys and avoid saving high-privilege keys on shared computers.
+密钥不会发送给本项目作者，但可访问本地 Zotero profile 的软件或人员可能读取密钥。
+
+建议使用权限受限、可撤销并设置额度上限的 API Key。
+
+## 术语表
+
+自定义术语表保存在本机 Zotero 首选项中。命中的术语映射会随待翻译标题一起写入远程翻译请求；本机服务仍只在本机处理。
+
+
+## PDF2zh 术语桥接
+
+启用桥接后，本插件会把当前术语的“源术语、标准译法和目标语言”写入 PDF2zh Server 本地文件夹，并修改其本地 `config.toml`。错误译法别名不会写入 PDF2zh CSV。
+
+桥接本身不上传 PDF 或术语；后续数据传输由用户选择的 PDF2zh 翻译服务决定。

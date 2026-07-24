@@ -5,7 +5,7 @@ var ZTTGlobal = this;
 const ZTT_PLUGIN_ID = "zotero-title-translator@zhouyi654.github.io";
 const ZTT_PREF_PREFIX = "extensions.zotero.titleTranslator.";
 const ZTT_COLUMN_DATA_KEY = "titleTranslation";
-const ZTT_MIGRATION_VERSION = 3;
+const ZTT_MIGRATION_VERSION = 5;
 
 async function startup({ id, version, rootURI }, reason) {
     await Zotero.initializationPromise;
@@ -14,6 +14,7 @@ async function startup({ id, version, rootURI }, reason) {
     ZoteroTitleTranslatorCore = ZTTGlobal.ZoteroTitleTranslatorCore;
 
     ZoteroTitleTranslator = createTitleTranslator(rootURI);
+    Zotero.ZoteroTitleTranslator = ZoteroTitleTranslator;
     await ZoteroTitleTranslator.startup();
 
     for (const window of Zotero.getMainWindows()) {
@@ -27,6 +28,9 @@ async function shutdown({ id, version, rootURI }, reason) {
     }
     if (ZoteroTitleTranslator) {
         await ZoteroTitleTranslator.shutdown();
+    }
+    if (Zotero.ZoteroTitleTranslator === ZoteroTitleTranslator) {
+        delete Zotero.ZoteroTitleTranslator;
     }
     ZoteroTitleTranslator = null;
     ZoteroTitleTranslatorCore = null;
@@ -63,6 +67,12 @@ function createTitleTranslator(rootURI) {
     let autoTranslateScheduleGeneration = 0;
     let lastAutoTranslateConfigError = "";
     const autoTranslatePendingIDs = new Set();
+    let pdf2zhHookOwner = null;
+    let pdf2zhOriginalOnDialogEvents = null;
+    let pdf2zhWrappedOnDialogEvents = null;
+    let pdf2zhHookRetryGeneration = 0;
+    let lastPdf2zhBridgeWarning = "";
+    let lastPdf2zhBridgeSuccessSignature = "";
 
     const menuIconURI = rootURI + "icons/menu.svg";
 
@@ -89,6 +99,28 @@ function createTitleTranslator(rootURI) {
 
     function alert(window, title, message) {
         Services.prompt.alert(window || null, title, message);
+    }
+
+
+    function promptText(
+        window,
+        title,
+        message,
+        initialValue = ""
+    ) {
+        const value = { value: String(initialValue ?? "") };
+        const accepted = Services.prompt.prompt(
+            window || null,
+            title,
+            message,
+            value,
+            null,
+            {}
+        );
+        return {
+            accepted,
+            value: String(value.value ?? "")
+        };
     }
 
     function completionNotificationEnabled() {
@@ -169,6 +201,598 @@ function createTitleTranslator(rootURI) {
         return ZoteroTitleTranslatorCore.normalizeProvider(
             pref("provider", "mymemory")
         );
+    }
+
+
+    function configuredTerminologyEntries() {
+        if (!Boolean(pref("terminologyEnabled", false))) {
+            return [];
+        }
+        return ZoteroTitleTranslatorCore.parseTerminology(
+            pref("terminologyEntries", "")
+        );
+    }
+
+
+    function pdf2zhBridgeEnabled() {
+        return Boolean(pref("pdf2zhBridgeEnabled", false));
+    }
+
+    function pdf2zhServerPath() {
+        return String(pref("pdf2zhServerPath", "")).trim();
+    }
+
+    function pdf2zhEngine() {
+        return String(
+            Zotero.Prefs.get(
+                "extensions.zotero.pdf2zh.engine",
+                true
+            )
+            ?? ""
+        ).trim();
+    }
+
+    function pathParent(value) {
+        const path = String(value ?? "").replace(/[\\/]+$/, "");
+        const match = path.match(/^(.*)[\\/][^\\/]+$/);
+        return match ? match[1] : "";
+    }
+
+    async function existingPath(candidates) {
+        for (const candidate of candidates) {
+            if (candidate && await IOUtils.exists(candidate)) {
+                return candidate;
+            }
+        }
+        return "";
+    }
+
+    async function resolvePdf2zhBridgePaths(
+        selectedPath = pdf2zhServerPath()
+    ) {
+        const base = String(selectedPath ?? "")
+            .trim()
+            .replace(/[\\/]+$/, "");
+        if (!base) {
+            throw new Error(
+                "请先选择 PDF2zh Server 文件夹。"
+            );
+        }
+
+        const configPath = await existingPath([
+            PathUtils.join(base, "config", "config.toml"),
+            PathUtils.join(
+                base,
+                "server",
+                "config",
+                "config.toml"
+            ),
+            PathUtils.join(base, "config.toml")
+        ]);
+        if (!configPath) {
+            throw new Error(
+                "所选文件夹中未找到 config/config.toml。"
+                + "请选择包含 server.py 的 PDF2zh Server 文件夹，"
+                + "或选择项目根目录。"
+            );
+        }
+
+        const configDirectory = pathParent(configPath);
+        const serverDirectory = pathParent(configDirectory);
+        const serverScript = PathUtils.join(
+            serverDirectory,
+            "server.py"
+        );
+        const repositoryServerScript = PathUtils.join(
+            base,
+            "server",
+            "server.py"
+        );
+
+        return {
+            selectedPath: base,
+            configPath,
+            configDirectory,
+            serverDirectory,
+            serverScriptFound:
+                await IOUtils.exists(serverScript)
+                || await IOUtils.exists(repositoryServerScript),
+            glossaryPath: PathUtils.join(
+                configDirectory,
+                "zotero-title-translator-glossary.csv"
+            ),
+            statePath: PathUtils.join(
+                configDirectory,
+                "zotero-title-translator-bridge-state.json"
+            ),
+            backupPath:
+                configPath + ".ztt-backup"
+        };
+    }
+
+    async function readJSONFile(path) {
+        if (!await IOUtils.exists(path)) {
+            return null;
+        }
+        try {
+            return JSON.parse(
+                await Zotero.File.getContentsAsync(path)
+            );
+        }
+        catch (error) {
+            throw new Error(
+                `无法读取桥接状态文件：${error?.message || error}`
+            );
+        }
+    }
+
+    async function writeTextFile(path, content) {
+        await Zotero.File.putContentsAsync(
+            path,
+            String(content ?? "")
+        );
+    }
+
+    function pdf2zhBridgeMode() {
+        return pref("pdf2zhGlossaryMode", "append")
+            === "replace"
+            ? "replace"
+            : "append";
+    }
+
+    function pdf2zhForceIgnoreCache() {
+        return Boolean(
+            pref("pdf2zhForceIgnoreCache", true)
+        );
+    }
+
+    function pdf2zhShowSyncNotification() {
+        return Boolean(
+            pref("pdf2zhShowSyncNotification", true)
+        );
+    }
+
+    async function syncPdf2zhGlossary(options = {}) {
+        const interactive = options.interactive === true;
+        if (!pdf2zhBridgeEnabled() && !interactive) {
+            return {
+                skipped: true,
+                reason: "disabled"
+            };
+        }
+
+        const engine = pdf2zhEngine();
+        if (engine && engine !== "pdf2zh_next") {
+            throw new Error(
+                "PDF2zh 当前翻译引擎不是 pdf2zh_next。"
+                + "旧版 pdf2zh 引擎不支持该术语桥接。"
+            );
+        }
+
+        const entries = configuredTerminologyEntries();
+        if (!entries.length) {
+            throw new Error(
+                "当前术语表未启用或没有有效术语。"
+            );
+        }
+
+        const paths = await resolvePdf2zhBridgePaths();
+        const configText = await Zotero.File.getContentsAsync(
+            paths.configPath
+        );
+        let state = await readJSONFile(paths.statePath);
+        const disableAutoGlossary = Boolean(
+            pref(
+                "pdf2zhDisableAutoGlossary",
+                false
+            )
+        );
+        let workingConfigText = configText;
+
+        if (
+            !disableAutoGlossary
+            && state?.changedNoAutoGlossary
+        ) {
+            workingConfigText = ZoteroTitleTranslatorCore
+                .restorePdf2zhToml(
+                    workingConfigText,
+                    {
+                        glossaryPath: "",
+                        originalAssignments:
+                            state.originalAssignments,
+                        changedNoAutoGlossary: true
+                    }
+                );
+            state.changedNoAutoGlossary = false;
+        }
+
+        const forceIgnoreCache =
+            pdf2zhForceIgnoreCache();
+        if (
+            !forceIgnoreCache
+            && state?.changedIgnoreCache
+        ) {
+            workingConfigText = ZoteroTitleTranslatorCore
+                .restorePdf2zhToml(
+                    workingConfigText,
+                    {
+                        glossaryPath: "",
+                        originalAssignments:
+                            state.originalAssignments,
+                        changedIgnoreCache: true
+                    }
+                );
+            state.changedIgnoreCache = false;
+        }
+
+        const updated = ZoteroTitleTranslatorCore
+            .configurePdf2zhToml(
+                workingConfigText,
+                {
+                    glossaryPath: paths.glossaryPath,
+                    mode: pdf2zhBridgeMode(),
+                    disableAutoGlossary,
+                    forceIgnoreCache
+                }
+            );
+
+        if (!await IOUtils.exists(paths.backupPath)) {
+            await writeTextFile(
+                paths.backupPath,
+                configText
+            );
+        }
+
+        const targetLanguage = String(
+            Zotero.Prefs.get(
+                "extensions.zotero.pdf2zh.targetLang",
+                true
+            )
+            ?? "zh-CN"
+        ).trim() || "zh-CN";
+        const glossaryCSV = ZoteroTitleTranslatorCore
+            .buildPdf2zhGlossaryCSV(
+                entries,
+                targetLanguage
+            );
+
+        await writeTextFile(
+            paths.glossaryPath,
+            glossaryCSV
+        );
+        await writeTextFile(
+            paths.configPath,
+            updated.text
+        );
+
+        const verifiedConfig =
+            await Zotero.File.getContentsAsync(
+                paths.configPath
+            );
+        const verification =
+            ZoteroTitleTranslatorCore.inspectPdf2zhToml(
+                verifiedConfig,
+                paths.glossaryPath
+            );
+        const glossaryFileExists =
+            await IOUtils.exists(paths.glossaryPath);
+
+        if (!glossaryFileExists) {
+            throw new Error(
+                "术语 CSV 写入后未找到，桥接未生效。"
+            );
+        }
+        if (!verification.glossaryConfigured) {
+            throw new Error(
+                "config.toml 写入后未引用生成的术语 CSV。"
+            );
+        }
+        if (
+            forceIgnoreCache
+            && !verification.ignoreCache
+        ) {
+            throw new Error(
+                "config.toml 未成功启用 ignore_cache。"
+            );
+        }
+
+        const now = new Date().toISOString();
+        if (!state) {
+            state = {
+                schemaVersion: 2,
+                pluginVersion: "0.3.8",
+                configPath: paths.configPath,
+                glossaryPath: paths.glossaryPath,
+                originalAssignments:
+                    updated.originalAssignments,
+                changedNoAutoGlossary:
+                    updated.changedNoAutoGlossary,
+                changedIgnoreCache:
+                    updated.changedIgnoreCache,
+                createdAt: now
+            };
+        }
+        else {
+            state.schemaVersion = 2;
+            state.pluginVersion = "0.3.8";
+            state.originalAssignments =
+                state.originalAssignments || {};
+            for (const key of [
+                "glossaries",
+                "no_auto_extract_glossary",
+                "ignore_cache"
+            ]) {
+                if (
+                    !(key in state.originalAssignments)
+                ) {
+                    state.originalAssignments[key] =
+                        updated.originalAssignments[key];
+                }
+            }
+            if (updated.changedNoAutoGlossary) {
+                state.changedNoAutoGlossary = true;
+            }
+            if (updated.changedIgnoreCache) {
+                state.changedIgnoreCache = true;
+            }
+        }
+        state.lastSyncedAt = now;
+        state.termCount = entries.length;
+        state.targetLanguage = targetLanguage;
+        state.forceIgnoreCache = forceIgnoreCache;
+        state.verification = verification;
+        await writeTextFile(
+            paths.statePath,
+            JSON.stringify(state, null, 2) + "\n"
+        );
+
+        const result = {
+            skipped: false,
+            termCount: entries.length,
+            targetLanguage,
+            engine: engine || "pdf2zh_next",
+            hookInstalled:
+                pdf2zhWrappedOnDialogEvents !== null,
+            serverScriptFound: paths.serverScriptFound,
+            glossaryFileExists,
+            verification,
+            forceIgnoreCache,
+            lastSyncedAt: now,
+            ...paths
+        };
+
+        log(
+            `PDF2zh 术语已同步：terms=${entries.length}; `
+            + `config=${paths.configPath}; `
+            + `glossary=${paths.glossaryPath}`
+        );
+        return result;
+    }
+
+    async function restorePdf2zhBridge() {
+        const paths = await resolvePdf2zhBridgePaths();
+        const state = await readJSONFile(paths.statePath);
+        if (!state) {
+            throw new Error(
+                "未找到桥接状态文件，无法确定需要恢复的配置。"
+            );
+        }
+
+        const configText = await Zotero.File.getContentsAsync(
+            paths.configPath
+        );
+        const restored = ZoteroTitleTranslatorCore
+            .restorePdf2zhToml(configText, state);
+        await writeTextFile(paths.configPath, restored);
+
+        for (const path of [
+            paths.glossaryPath,
+            paths.statePath
+        ]) {
+            if (await IOUtils.exists(path)) {
+                await IOUtils.remove(path);
+            }
+        }
+
+        log(`已恢复 PDF2zh 术语配置：${paths.configPath}`);
+        return {
+            restored: true,
+            ...paths
+        };
+    }
+
+    async function getPdf2zhBridgeStatus() {
+        let paths = null;
+        let error = "";
+        try {
+            paths = await resolvePdf2zhBridgePaths();
+        }
+        catch (caught) {
+            error = caught?.message || String(caught);
+        }
+
+        const pdf2zhDetected = Boolean(
+            Zotero.pdf2zh?.hooks
+        );
+        const terminologyCount =
+            configuredTerminologyEntries().length;
+
+        let verification = null;
+        let glossaryFileExists = false;
+        let state = null;
+        if (paths) {
+            try {
+                const configText =
+                    await Zotero.File.getContentsAsync(
+                        paths.configPath
+                    );
+                verification =
+                    ZoteroTitleTranslatorCore.inspectPdf2zhToml(
+                        configText,
+                        paths.glossaryPath
+                    );
+                glossaryFileExists =
+                    await IOUtils.exists(
+                        paths.glossaryPath
+                    );
+                state = await readJSONFile(
+                    paths.statePath
+                );
+            }
+            catch (caught) {
+                error = error
+                    || caught?.message
+                    || String(caught);
+            }
+        }
+
+        return {
+            enabled: pdf2zhBridgeEnabled(),
+            pdf2zhDetected,
+            hookInstalled:
+                pdf2zhWrappedOnDialogEvents !== null,
+            engine: pdf2zhEngine() || "未知",
+            terminologyCount,
+            forceIgnoreCache:
+                pdf2zhForceIgnoreCache(),
+            glossaryFileExists,
+            verification,
+            lastSyncedAt:
+                state?.lastSyncedAt || "",
+            lastSyncedTermCount:
+                state?.termCount ?? null,
+            error,
+            ...(paths || {})
+        };
+    }
+
+    function warnPdf2zhBridge(error) {
+        const message = error?.message || String(error);
+        logError(error);
+        if (message === lastPdf2zhBridgeWarning) {
+            return;
+        }
+        lastPdf2zhBridgeWarning = message;
+        showSilentNotification(
+            Zotero.getMainWindow(),
+            "PDF2zh 术语桥接未同步",
+            [
+                message,
+                "PDF2zh 将继续按原配置执行翻译。"
+            ]
+        );
+    }
+
+    function installPdf2zhBridgeHook() {
+        const hooks = Zotero.pdf2zh?.hooks;
+        const current = hooks?.onDialogEvents;
+        if (!hooks || typeof current !== "function") {
+            return false;
+        }
+        if (current === pdf2zhWrappedOnDialogEvents) {
+            return true;
+        }
+        if (current.__zttPdf2zhBridge === true) {
+            pdf2zhHookOwner = hooks;
+            pdf2zhWrappedOnDialogEvents = current;
+            return true;
+        }
+
+        const original = current;
+        const wrapped = function (type, ...args) {
+            if (
+                type !== "translatePDF"
+                || !pdf2zhBridgeEnabled()
+            ) {
+                return original.apply(this, [type, ...args]);
+            }
+
+            return Promise.resolve()
+                .then(() => syncPdf2zhGlossary())
+                .then(result => {
+                    if (
+                        result
+                        && !result.skipped
+                        && pdf2zhShowSyncNotification()
+                    ) {
+                        const signature = [
+                            result.lastSyncedAt,
+                            result.termCount,
+                            result.forceIgnoreCache
+                        ].join(":");
+                        if (
+                            signature
+                            !== lastPdf2zhBridgeSuccessSignature
+                        ) {
+                            lastPdf2zhBridgeSuccessSignature =
+                                signature;
+                            showSilentNotification(
+                                Zotero.getMainWindow(),
+                                "PDF2zh 术语桥接已生效",
+                                [
+                                    `已同步 ${result.termCount} 条术语。`,
+                                    result.forceIgnoreCache
+                                        ? "本次已强制忽略旧翻译缓存。"
+                                        : "本次允许使用旧翻译缓存。"
+                                ]
+                            );
+                        }
+                    }
+                    return result;
+                })
+                .catch(warnPdf2zhBridge)
+                .then(() => original.apply(this, [type, ...args]));
+        };
+        wrapped.__zttPdf2zhBridge = true;
+        wrapped.__zttOriginal = original;
+
+        try {
+            hooks.onDialogEvents = wrapped;
+        }
+        catch (error) {
+            logError(error);
+            return false;
+        }
+
+        pdf2zhHookOwner = hooks;
+        pdf2zhOriginalOnDialogEvents = original;
+        pdf2zhWrappedOnDialogEvents = wrapped;
+        log("已安装 PDF2zh 翻译入口术语桥接。\n");
+        return true;
+    }
+
+    function uninstallPdf2zhBridgeHook() {
+        if (
+            pdf2zhHookOwner
+            && pdf2zhWrappedOnDialogEvents
+            && pdf2zhHookOwner.onDialogEvents
+                === pdf2zhWrappedOnDialogEvents
+        ) {
+            pdf2zhHookOwner.onDialogEvents =
+                pdf2zhOriginalOnDialogEvents;
+        }
+        pdf2zhHookOwner = null;
+        pdf2zhOriginalOnDialogEvents = null;
+        pdf2zhWrappedOnDialogEvents = null;
+    }
+
+    async function schedulePdf2zhBridgeHook() {
+        const generation = ++pdf2zhHookRetryGeneration;
+        for (const delay of [0, 1000, 3000, 10000, 30000]) {
+            if (delay) {
+                await Zotero.Promise.delay(delay);
+            }
+            if (
+                !pluginActive
+                || generation !== pdf2zhHookRetryGeneration
+            ) {
+                return false;
+            }
+            if (installPdf2zhBridgeHook()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     function providerLabel(provider = currentProvider()) {
@@ -300,6 +924,21 @@ function createTitleTranslator(rootURI) {
                 if (oldBase) setPref("customBaseURL", oldBase);
             }
             setPref("provider", newProvider);
+        }
+
+        if (migrated < 4) {
+            const terminologyText = String(
+                pref("terminologyEntries", "")
+            );
+            if (terminologyText.trim()) {
+                setPref(
+                    "terminologyEntries",
+                    ZoteroTitleTranslatorCore
+                        .normalizeTerminologyText(
+                            terminologyText
+                        )
+                );
+            }
         }
 
         setPref("migrationVersion", ZTT_MIGRATION_VERSION);
@@ -509,10 +1148,15 @@ function createTitleTranslator(rootURI) {
         const state = windowState.get(window);
         if (!state) return;
 
-        const hasItems = selectedRegularItems(window).length > 0;
-        for (const node of state.itemCommandNodes) {
-            node.disabled = busy || !hasItems;
-        }
+        const selectedItems = selectedRegularItems(window);
+        const hasItems = selectedItems.length > 0;
+        const hasSingleItem = selectedItems.length === 1;
+
+        state.translateNode.disabled = busy || !hasItems;
+        state.forceNode.disabled = busy || !hasItems;
+        state.clearNode.disabled = busy || !hasItems;
+        state.editNode.disabled = busy || !hasSingleItem;
+
         state.translateNode.setAttribute(
             "label",
             busy ? "正在翻译标题…" : "翻译标题（跳过已有译题）"
@@ -890,10 +1534,16 @@ function createTitleTranslator(rootURI) {
         endpointBuilder = ZoteroTitleTranslatorCore.buildChatEndpoint,
         payloadBuilder = ZoteroTitleTranslatorCore.buildGenericChatPayload,
         extra = {},
-        additionalHeaders = {}
+        additionalHeaders = {},
+        terminologyEntries = []
     }) {
         const endpoint = endpointBuilder(baseURL);
-        const payload = payloadBuilder(model, title, extra);
+        const payload = payloadBuilder(
+            model,
+            title,
+            extra,
+            terminologyEntries
+        );
         const headers = Object.assign(
             {},
             additionalHeaders || {}
@@ -913,7 +1563,11 @@ function createTitleTranslator(rootURI) {
             .extractGenericChatTranslation(data);
     }
 
-    async function requestTranslationOnce(title, provider) {
+    async function requestTranslationOnce(
+        title,
+        provider,
+        terminologyEntries = []
+    ) {
         const timeoutMs = Math.max(
             5000,
             Number(pref("timeoutMs", 60000)) || 60000
@@ -1044,7 +1698,8 @@ function createTitleTranslator(rootURI) {
                         sourceLanguageCode: pref(
                             "sourceLanguageCode",
                             "en"
-                        )
+                        ),
+                        terminologyEntries
                     }),
                     {},
                     timeoutMs
@@ -1066,7 +1721,8 @@ function createTitleTranslator(rootURI) {
                         ZoteroTitleTranslatorCore.buildQwenPayload,
                     additionalHeaders: {
                         "X-DashScope-Wait-Timeout": "30"
-                    }
+                    },
+                    terminologyEntries
                 });
 
             case "siliconflow":
@@ -1078,7 +1734,8 @@ function createTitleTranslator(rootURI) {
                     timeoutMs,
                     extra: {
                         enable_thinking: false
-                    }
+                    },
+                    terminologyEntries
                 });
 
             case "volcengine":
@@ -1090,7 +1747,8 @@ function createTitleTranslator(rootURI) {
                     timeoutMs,
                     extra: {
                         thinking: { type: "disabled" }
-                    }
+                    },
+                    terminologyEntries
                 });
 
             case "deepseek":
@@ -1102,7 +1760,8 @@ function createTitleTranslator(rootURI) {
                     timeoutMs,
                     extra: {
                         thinking: { type: "disabled" }
-                    }
+                    },
+                    terminologyEntries
                 });
 
             case "gemini": {
@@ -1114,7 +1773,10 @@ function createTitleTranslator(rootURI) {
                 const data = await postJSON(
                     endpoint,
                     ZoteroTitleTranslatorCore
-                        .buildGeminiPayload(title),
+                        .buildGeminiPayload(
+                            title,
+                            terminologyEntries
+                        ),
                     {
                         "x-goog-api-key": String(
                             pref("geminiApiKey", "")
@@ -1132,7 +1794,8 @@ function createTitleTranslator(rootURI) {
                     apiKey: pref("openaiApiKey", ""),
                     model: pref("openaiModel", ""),
                     title,
-                    timeoutMs
+                    timeoutMs,
+                    terminologyEntries
                 });
 
             case "custom":
@@ -1141,7 +1804,8 @@ function createTitleTranslator(rootURI) {
                     apiKey: pref("customApiKey", ""),
                     model: pref("customModel", ""),
                     title,
-                    timeoutMs
+                    timeoutMs,
+                    terminologyEntries
                 });
 
             default:
@@ -1151,9 +1815,23 @@ function createTitleTranslator(rootURI) {
 
     async function requestTranslation(title) {
         const provider = currentProvider();
-        return withProviderRetry(
+        const terminologyEntries =
+            ZoteroTitleTranslatorCore.matchingTerminologyEntries(
+                title,
+                configuredTerminologyEntries()
+            );
+        const translation = await withProviderRetry(
             provider,
-            () => requestTranslationOnce(title, provider)
+            () => requestTranslationOnce(
+                title,
+                provider,
+                terminologyEntries
+            )
+        );
+        return ZoteroTitleTranslatorCore.applyTerminology(
+            title,
+            translation,
+            terminologyEntries
         );
     }
 
@@ -1663,6 +2341,84 @@ function createTitleTranslator(rootURI) {
         await translateScope(window, context);
     }
 
+    async function editSelectedTranslation(window) {
+        if (busy) return;
+
+        const items = selectedRegularItems(window);
+        if (items.length !== 1) {
+            alert(
+                window,
+                "编辑标题译文",
+                "请只选择一个可编辑的普通文献条目。"
+            );
+            return;
+        }
+
+        const item = items[0];
+        const originalTitle =
+            ZoteroTitleTranslatorCore.normalizeOneLine(
+                item.getField("title")
+            );
+        const oldExtra = item.getField("extra") || "";
+        const currentTranslation =
+            ZoteroTitleTranslatorCore.readTranslation(oldExtra);
+        const result = promptText(
+            window,
+            "编辑标题译文",
+            "原始标题：\n"
+            + `${originalTitle || "（空标题）"}\n\n`
+            + "请输入中文译题。留空并确认将清除现有译题。",
+            currentTranslation
+        );
+
+        if (!result.accepted) {
+            return;
+        }
+
+        const edited =
+            ZoteroTitleTranslatorCore.normalizeOneLine(result.value);
+        if (!edited) {
+            if (!currentTranslation) {
+                return;
+            }
+            if (!confirm(
+                window,
+                "清除标题译文",
+                "输入内容为空。是否清除该条目的现有标题译文？",
+                "清除"
+            )) {
+                return;
+            }
+            item.setField(
+                "extra",
+                ZoteroTitleTranslatorCore.clearTranslation(oldExtra)
+            );
+            await item.saveTx();
+            Zotero.ItemTreeManager.refreshColumns();
+            showSilentNotification(
+                window,
+                "标题译文已清除",
+                [originalTitle || "所选条目"]
+            );
+            return;
+        }
+
+        item.setField(
+            "extra",
+            ZoteroTitleTranslatorCore.writeTranslation(
+                oldExtra,
+                edited
+            )
+        );
+        await item.saveTx();
+        Zotero.ItemTreeManager.refreshColumns();
+        showSilentNotification(
+            window,
+            "标题译文已更新",
+            [edited]
+        );
+    }
+
     async function clearSelected(window) {
         if (busy) return;
 
@@ -1880,6 +2636,7 @@ function createTitleTranslator(rootURI) {
 
     async function onMainWindowLoad(window) {
         if (!window || windowState.has(window)) return;
+        installPdf2zhBridgeHook();
 
         const document = window.document;
         const itemPopup = document.getElementById("zotero-itemmenu");
@@ -1905,6 +2662,12 @@ function createTitleTranslator(rootURI) {
             () => translateSelected(window, true).catch(logError),
             menuIconURI
         );
+        const editNode = createMenuItem(
+            document,
+            "ztt-edit-title-translation",
+            "编辑标题译文…",
+            () => editSelectedTranslation(window).catch(logError)
+        );
         const clearNode = createMenuItem(
             document,
             "ztt-clear-title-translation",
@@ -1916,6 +2679,7 @@ function createTitleTranslator(rootURI) {
             separator,
             translateNode,
             forceNode,
+            editNode,
             clearNode
         );
 
@@ -1955,10 +2719,12 @@ function createTitleTranslator(rootURI) {
             separator,
             translateNode,
             forceNode,
+            editNode,
             clearNode,
             itemCommandNodes: [
                 translateNode,
                 forceNode,
+                editNode,
                 clearNode
             ],
             onItemPopupShowing,
@@ -1992,6 +2758,7 @@ function createTitleTranslator(rootURI) {
             state.separator,
             state.translateNode,
             state.forceNode,
+            state.editNode,
             state.clearNode,
             state.fallbackLibraryNode,
             state.fallbackToolsNode
@@ -2034,11 +2801,16 @@ function createTitleTranslator(rootURI) {
         preferencePaneID = Zotero.PreferencePanes.register({
             pluginID: ZTT_PLUGIN_ID,
             src: rootURI + "content/preferences.xhtml",
+            scripts: [
+                rootURI + "core.js",
+                rootURI + "content/preferences.js"
+            ],
             rawLabel: "标题翻译"
         });
 
         registerOfficialMenus();
         registerAutomaticTranslationObserver();
+        schedulePdf2zhBridgeHook().catch(logError);
 
         log(
             `插件已启动；column=${registeredColumnKey}; `
@@ -2052,6 +2824,8 @@ function createTitleTranslator(rootURI) {
         autoTranslateScheduleGeneration++;
         autoTranslatePendingIDs.clear();
         unregisterAutomaticTranslationObserver();
+        pdf2zhHookRetryGeneration++;
+        uninstallPdf2zhBridgeHook();
 
         for (const window of Array.from(windowState.keys())) {
             onMainWindowUnload(window);
@@ -2081,8 +2855,13 @@ function createTitleTranslator(rootURI) {
         onMainWindowLoad,
         onMainWindowUnload,
         translateSelected,
+        editSelectedTranslation,
         translateScope,
         translateCurrentScope,
-        clearSelected
+        clearSelected,
+        syncPdf2zhGlossary,
+        restorePdf2zhBridge,
+        getPdf2zhBridgeStatus,
+        installPdf2zhBridgeHook
     };
 }

@@ -59,6 +59,20 @@ pref("extensions.zotero.titleTranslator.apiKey", "");
 pref("extensions.zotero.titleTranslator.model", "qwen-mt-plus");
 pref("extensions.zotero.titleTranslator.targetLanguage", "Chinese");
 
+// 术语表与译后校正。默认关闭。
+pref("extensions.zotero.titleTranslator.terminologyEnabled", false);
+pref("extensions.zotero.titleTranslator.terminologyEntries", "");
+
+// PDF2zh Next 术语桥接。默认关闭，不修改 PDF2zh 插件文件。
+pref("extensions.zotero.titleTranslator.pdf2zhBridgeEnabled", false);
+pref("extensions.zotero.titleTranslator.pdf2zhServerPath", "");
+pref("extensions.zotero.titleTranslator.pdf2zhGlossaryMode", "append");
+pref("extensions.zotero.titleTranslator.pdf2zhDisableAutoGlossary", false);
+// 重新翻译同一 PDF 时绕过 BabelDOC/PDF2zh 翻译缓存。
+pref("extensions.zotero.titleTranslator.pdf2zhForceIgnoreCache", true);
+// 翻译启动前显示术语已同步的无声回执，便于确认桥接确实执行。
+pref("extensions.zotero.titleTranslator.pdf2zhShowSyncNotification", true);
+
 // 自动翻译新导入条目。默认关闭，避免未经确认产生远程调用或费用。
 pref("extensions.zotero.titleTranslator.autoTranslateOnAdd", false);
 pref("extensions.zotero.titleTranslator.autoTranslateDelaySeconds", 3);

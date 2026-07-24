@@ -12,7 +12,7 @@ const preferences = fs.readFileSync(
 );
 const readme = fs.readFileSync("README.md", "utf8");
 
-assert.strictEqual(manifest.version, "0.3.4");
+assert.ok(manifest.version.startsWith("0.3."));
 
 assert.ok(
     prefs.includes('autoTranslateOnAdd", false')

@@ -14,6 +14,7 @@ EXCLUDED_TOP_LEVEL = {
     ".github",
     "dist",
     "tests",
+    "examples",
     "__pycache__",
 }
 
@@ -64,6 +65,7 @@ def build() -> Path:
             "core.js",
             "prefs.js",
             "content/preferences.xhtml",
+            "content/preferences.js",
         ):
             if required not in names:
                 raise RuntimeError(f"Missing required file: {required}")

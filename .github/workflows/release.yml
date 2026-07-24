@@ -82,4 +82,8 @@ jobs:
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           XPI="dist/zotero-title-translator-${VERSION}.xpi"
-          gh release create "${GITHUB_REF_NAME}"             "$XPI" updates.json             --title "Zotero 标题翻译 ${VERSION}"             --generate-notes
+          gh release create "${GITHUB_REF_NAME}" \
+            "$XPI" \
+            updates.json \
+            --title "Zotero 标题翻译 ${VERSION}" \
+            --generate-notes

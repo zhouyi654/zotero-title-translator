@@ -1,73 +1,136 @@
-# Changelog
+# 更新日志
+
+## 0.3.8
+
+- 修复重新翻译同一 PDF 时可能复用旧错误译文的问题。
+- PDF2zh 术语桥接新增 `ignore_cache = true` 管理，默认开启。
+- 同步后重新读取 `config.toml`，验证生成的术语 CSV 确实被引用。
+- 检查术语 CSV 文件是否真实存在。
+- 翻译启动前可显示“桥接已生效”的无声回执。
+- 设置状态区新增术语 CSV、配置引用、缓存和自动术语提取状态。
+- 桥接恢复时恢复原来的 `ignore_cache` 配置。
+- 增加缓存绕过、配置验证和恢复测试。
+
+## 0.3.7
+
+- 新增 PDF2zh Next 全文翻译术语桥接，默认关闭。
+- 不修改或重新打包 PDF2zh 插件文件，只在运行时包装其“翻译 PDF”入口。
+- 翻译开始前自动将当前术语表导出为 BabelDOC CSV。
+- 自动更新 PDF2zh Server `config/config.toml` 中的 `glossaries`。
+- 支持追加到现有术语文件或仅使用本插件术语。
+- 可选择保留或关闭 PDF2zh 自动术语提取。
+- 首次同步创建完整配置备份和桥接状态文件。
+- 新增配置检测、立即同步和恢复桥接前配置按钮。
+- 同步失败时记录错误并继续执行 PDF2zh 原翻译流程。
+- 增加 TOML 配置、CSV 生成、恢复和运行时 Hook 测试。
+
+## 0.3.6
+
+- 术语规则推荐分隔符由 `=>` 改为更简洁的 `=`。
+- 保留对旧版 `=>` 规则的向后兼容，并在升级时规范化为 `=`。
+- 新增一次导入一个或多个外部术语文件。
+- 支持 UTF-8 TXT、TERMS、GLOSSARY、CSV、TSV 和 JSON。
+- CSV/TSV 支持中英文表头、无表头模式、引号和多列别名。
+- JSON 支持对象数组、映射对象以及 `entries` / `terms` 包装。
+- 导入时可选择“合并导入”或“替换全部”。
+- 同源术语以后导入的规则覆盖较早规则。
+- 新增当前术语表导出，可输出 TXT、CSV、TSV 或 JSON。
+- 新增 CSV 模板保存按钮。
+- 导入成功后自动启用术语表。
+- 增加文件格式解析、合并覆盖、规范化和偏好面板脚本测试。
+
+本文件记录 Zotero 标题翻译插件的重要变更。
+
+## 0.3.5
+
+- 新增右键“编辑标题译文…”，可直接修改或清除单个条目的译题。
+- 新增可开关的自定义术语表，默认关闭。
+- 术语规则支持 `源术语 => 标准译法`。
+- 支持在规则中使用 `|` 列出需要自动纠正的错误译法。
+- 大模型和 Qwen-MT 请求会加入命中的强制术语映射。
+- 所有翻译服务在返回译文后都会执行保守的术语校正。
+- 新增术语解析、命中、译后替换和手动编辑菜单测试。
 
 ## 0.3.4
 
 - 新增“导入文献后自动翻译标题”开关，默认关闭。
-- 使用 Zotero Notifier 监听新增条目事件。
+- 使用 Zotero Notifier 监听新增条目。
 - 新增 1–30 秒的导入后等待时间，默认 3 秒。
-- 短时间内新增的条目会合并成一个自动翻译批次。
-- 自动翻译跳过中文、已有译题、空标题、附件、笔记和不可编辑条目。
-- 自动翻译不显示确认框，仍遵守服务商并发、限流和重试规则。
-- 插件关闭时注销 Notifier observer，并清除待处理队列。
-- 增加自动翻译观察器、设置和生命周期测试。
+- 短时间内新增的条目合并成一个自动翻译批次。
+- 自动翻译跳过中文、已有译题、空标题、附件、笔记、批注和不可编辑条目。
+- 自动翻译不显示批量确认框，仍遵守当前服务的并发、限流和重试规则。
+- 服务配置缺失时，自动翻译跳过任务并显示无声提示。
+- 插件关闭时注销 Notifier 观察器并清除待处理队列。
+- 增加自动翻译设置、观察器和生命周期测试。
 
 ## 0.3.3
 
 - 修复右键分类时错误翻译整个文献库的问题。
-- 分类右键现在只读取所选分类的直接子条目。
-- 子分类不会被自动递归处理。
+- 分类右键只读取所选分类直接包含的条目。
+- 默认不递归处理子分类。
 - 文献库根节点仍可翻译整个文献库。
 - 右键菜单和工具菜单根据当前范围动态显示“分类”或“文献库”。
-- 确认窗口明确显示实际处理范围和条目数量。
-- 增加分类范围静态测试。
+- 确认窗口显示实际处理范围和条目数量。
+- 增加分类范围测试。
 
 ## 0.3.2
 
-- Prepared the project for public GitHub release.
-- Added a stable plugin ID and GitHub release update URL.
-- Replaced placeholder author and `example.com` metadata.
-- Added Qwen-MT pacing, HTTP 429 exponential retry and detailed HTTP errors.
-- Added CI and tag-based release workflows.
-- Added `PRIVACY.md`, `SECURITY.md`, `.gitignore` and release documentation.
-- Rewrote the README for end users and contributors.
-- Replaced the developer-only credential warning with user-facing security text.
+- 为公开 GitHub 项目准备稳定插件 ID 和更新地址。
+- 将作者、主页和更新地址替换为正式仓库信息。
+- 增加 Qwen-MT 请求节流、HTTP 429 指数退避重试和错误信息解析。
+- 增加 GitHub Actions 持续集成和标签发布流程。
+- 增加 `PRIVACY.md`、`SECURITY.md`、`.gitignore` 和发布文档。
+- 增加 XPI 构建脚本和自动生成 `updates.json` 的发布流程。
+- 清理项目中的占位域名和示例插件 ID。
 
 ## 0.3.1
 
-- 移除翻译完成后的模态 `Services.prompt.alert`。
-- 完成通知改为无声的 `Zotero.ProgressWindow`。
+- 将翻译完成提示由系统模态弹窗改为无声的 Zotero 通知窗口。
 - 新增“翻译完成后显示提示”开关。
-- 新增 2–30 秒的通知自动关闭时间。
-- 关闭完成通知后，任务仍正常执行，仅不显示完成窗口。
-- 配置错误和整库翻译前确认框继续保留。
-- 完整批量结果写入 Zotero Debug/Error Log，不再显示超长完成弹窗。
+- 新增 2–30 秒通知自动关闭时间。
+- 关闭完成通知后，翻译和保存逻辑继续运行。
+- 完整批量结果写入 Zotero Debug/Error Log。
+- 配置错误和分类/整库翻译前确认框继续保留。
 
 ## 0.3.0
 
-- 修复文献库右键菜单未出现：
-  - `register()` 改为 `registerMenu()`
-  - `unregister()` 改为 `unregisterMenu()`
-  - 放宽左侧树节点识别，不再只依赖 `row.isLibrary()`
-- 新增工具菜单的整库翻译入口。
+- 修复文献库右键菜单注册方式，改用 `registerMenu()` / `unregisterMenu()`。
+- 增加工具菜单的批量翻译入口。
 - 新增 Google Cloud Translation。
 - 新增 DeepL API Free / Pro。
 - 新增 Microsoft Translator。
-- 新增 SiliconFlow 预设。
-- 新增火山方舟预设。
-- 新增 DeepSeek 预设。
-- 新增 Gemini API。
-- 独立拆分 Qwen-MT、OpenAI 和自定义兼容服务的配置。
-- 增加 0.2 旧配置自动迁移。
+- 新增 SiliconFlow、火山方舟、DeepSeek、Gemini、OpenAI 和自定义兼容接口。
+- 将 Qwen-MT 与通用兼容接口配置分离。
+- 增加旧版本配置迁移。
 
 ## 0.2.0
 
-- 新增服务选择器。
+- 新增翻译服务选择器。
 - 新增 MyMemory 免费在线翻译。
-- 新增 LibreTranslate 自托管适配器。
-- 新增 Ollama 本地适配器。
+- 新增 LibreTranslate 自托管翻译。
+- 新增 Ollama 本地翻译。
 - 默认推荐 `translategemma:4b`。
 - MyMemory 固定单并发并主动降速。
-- Ollama 固定单并发，避免本地推理资源争用。
-- 整库确认窗口显示当前服务和相应隐私、费用或配额提示。
-- 升级用户若已配置原 API，自动保留 OpenAI-compatible 模式。
+- Ollama 固定单并发，减少本地推理资源争用。
+- 整库确认窗口显示服务费用、配额和隐私提示。
 
+## 0.1.4
+
+- 加入插件管理器图标和菜单图标。
+- 新增文献库批量翻译入口。
+- 整库翻译前显示请求数量和费用提示。
+
+## 0.1.3
+
+- 自定义列名称改为“标题（中文）”。
+- 中文原标题直接显示在该列。
+- 中文标题不调用翻译服务，也不重复写入 `Extra`。
+
+## 0.1.2
+
+- 修复 Zotero 9.0.x 安装兼容范围和插件清单。
+
+## 0.1.0
+
+- 初始版本。
+- 新增标题翻译列、所选条目翻译和 `Extra` 译题存储。
