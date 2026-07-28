@@ -13,7 +13,7 @@ const preferences = fs.readFileSync(
     "utf8"
 );
 
-assert.strictEqual(manifest.version, "0.2.0");
+assert.ok(/^0\.[123]\./.test(manifest.version));
 assert.ok(prefs.includes('provider", "mymemory"'));
 assert.ok(preferences.includes('value="mymemory"'));
 assert.ok(preferences.includes('value="libretranslate"'));

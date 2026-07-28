@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "Zotero 标题翻译",
-  "version": "0.3.8",
-  "description": "Zotero 9 标题翻译插件：支持分类和自动翻译、可编辑译题、术语集合，并提供带缓存绕过和运行时验证的 PDF2zh Next 术语桥接。",
+  "version": "0.3.10",
+  "description": "Zotero 9 文献标题与摘要翻译插件：支持侧边栏译文相邻显示、分类和自动翻译、术语集合及 PDF2zh Next 术语桥接。",
   "author": "zhouyi654",
   "applications": {
     "zotero": {

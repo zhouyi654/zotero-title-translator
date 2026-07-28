@@ -2,6 +2,8 @@
 // 新安装默认使用 MyMemory；升级用户会在 bootstrap.js 中迁移旧配置。
 pref("extensions.zotero.titleTranslator.provider", "mymemory");
 pref("extensions.zotero.titleTranslator.migrationVersion", 0);
+// 将旧版 ZoteroTitleTranslation 迁移到与 Translate for Zotero 兼容的 titleTranslation。
+pref("extensions.zotero.titleTranslator.extraFieldMigrationVersion", 0);
 
 // 通用语言设置
 pref("extensions.zotero.titleTranslator.sourceLanguageName", "English");
@@ -76,6 +78,8 @@ pref("extensions.zotero.titleTranslator.pdf2zhShowSyncNotification", true);
 // 自动翻译新导入条目。默认关闭，避免未经确认产生远程调用或费用。
 pref("extensions.zotero.titleTranslator.autoTranslateOnAdd", false);
 pref("extensions.zotero.titleTranslator.autoTranslateDelaySeconds", 3);
+// 摘要通常更长、费用更高，因此默认关闭。
+pref("extensions.zotero.titleTranslator.autoTranslateAbstractOnAdd", false);
 
 // 完成通知：使用无声的 Zotero.ProgressWindow，不使用系统 alert。
 pref("extensions.zotero.titleTranslator.showCompletionNotification", true);

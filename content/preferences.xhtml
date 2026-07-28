@@ -647,6 +647,15 @@
                 preference="extensions.zotero.titleTranslator.autoTranslateOnAdd"
             />
 
+            <label for="ztt-auto-translate-abstract-on-add">
+                导入后同时自动翻译摘要
+            </label>
+            <input
+                id="ztt-auto-translate-abstract-on-add"
+                type="checkbox"
+                preference="extensions.zotero.titleTranslator.autoTranslateAbstractOnAdd"
+            />
+
             <label for="ztt-auto-translate-delay-seconds">
                 导入后等待时间（秒）
             </label>
@@ -665,9 +674,10 @@
             以及同步到本机的新条目。短时间内新增的条目会合并处理，不逐篇弹出确认框。
         </p>
         <p class="ztt-warning">
-            自动翻译只处理启用后新增的普通文献，仍会跳过中文标题、已有译题、
-            空标题、附件、笔记、批注和不可编辑条目。远程服务可能产生费用或消耗
-            免费额度；启用前请先完成服务配置，并用少量文献测试。
+            自动翻译只处理启用后新增的普通文献，仍会跳过中文内容、已有译文、
+            空标题或摘要、附件、笔记、批注和不可编辑条目。摘要通常远长于标题，
+            会消耗更多 token、配额或费用，因此摘要自动翻译默认关闭。启用前请先完成
+            服务配置，并用少量文献测试。
         </p>
     </section>
 
@@ -741,7 +751,7 @@
         <h2>数据与安全</h2>
         <p class="ztt-help">
             译题保存在 Extra：
-            <code>ZoteroTitleTranslation: 译题</code>。
+            <code>titleTranslation: 译题</code>；摘要译文保存为 <code>abstractTranslation: 译文</code>。旧版 <code>ZoteroTitleTranslation</code> 会在升级后自动迁移。
             中文原标题直接显示，不重复写入。
         </p>
         <p class="ztt-warning">

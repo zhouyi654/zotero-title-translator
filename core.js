@@ -10,7 +10,10 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
     "use strict";
 
-    const EXTRA_KEY = "ZoteroTitleTranslation";
+    const LEGACY_TITLE_EXTRA_KEY = "ZoteroTitleTranslation";
+    const TITLE_EXTRA_KEY = "titleTranslation";
+    const ABSTRACT_EXTRA_KEY = "abstractTranslation";
+    const EXTRA_KEY = TITLE_EXTRA_KEY;
 
     const PROVIDERS = Object.freeze({
         MYMEMORY: "mymemory",
@@ -39,11 +42,15 @@
         return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     }
 
-    function translationLineRegExp() {
+    function extraFieldLineRegExp(key) {
         return new RegExp(
-            "^\\s*" + escapeRegExp(EXTRA_KEY) + "\\s*:\\s*(.*?)\\s*$",
+            "^\\s*" + escapeRegExp(key) + "\\s*:\\s*(.*?)\\s*$",
             "i"
         );
+    }
+
+    function translationLineRegExp() {
+        return extraFieldLineRegExp(TITLE_EXTRA_KEY);
     }
 
     function normalizeOneLine(value) {
@@ -754,8 +761,8 @@
         return output;
     }
 
-    function readTranslation(extra) {
-        const pattern = translationLineRegExp();
+    function readExtraField(extra, key) {
+        const pattern = extraFieldLineRegExp(key);
         for (const line of String(extra ?? "").split(/\r?\n/)) {
             const match = line.match(pattern);
             if (match) {
@@ -765,11 +772,11 @@
         return "";
     }
 
-    function clearTranslation(extra) {
-        const pattern = translationLineRegExp();
+    function clearExtraFields(extra, keys) {
+        const patterns = (keys || []).map(extraFieldLineRegExp);
         const output = String(extra ?? "")
             .split(/\r?\n/)
-            .filter(line => !pattern.test(line));
+            .filter(line => !patterns.some(pattern => pattern.test(line)));
 
         while (output.length && output[output.length - 1].trim() === "") {
             output.pop();
@@ -777,35 +784,83 @@
         return output.join("\n");
     }
 
-    function writeTranslation(extra, translation) {
-        const normalized = cleanTranslation(translation);
-        const pattern = translationLineRegExp();
-        const originalLines = String(extra ?? "").split(/\r?\n/);
-        const output = [];
-        let replaced = false;
-
-        for (const line of originalLines) {
-            if (pattern.test(line)) {
-                if (!replaced) {
-                    output.push(`${EXTRA_KEY}: ${normalized}`);
-                    replaced = true;
-                }
-                continue;
-            }
-            output.push(line);
-        }
+    function writeExtraField(
+        extra,
+        key,
+        value,
+        cleaner = cleanTranslation,
+        removeKeys = []
+    ) {
+        const normalized = cleaner(value);
+        const keys = Array.from(new Set([key, ...removeKeys]));
+        const output = clearExtraFields(extra, keys).split(/\r?\n/);
 
         while (output.length && output[output.length - 1].trim() === "") {
             output.pop();
         }
-
-        if (!replaced) {
-            if (output.length && output.some(line => line.trim() !== "")) {
-                output.push("");
-            }
-            output.push(`${EXTRA_KEY}: ${normalized}`);
+        if (output.length && output.some(line => line.trim() !== "")) {
+            output.push("");
         }
+        output.push(`${key}: ${normalized}`);
         return output.join("\n");
+    }
+
+    function readLegacyTranslation(extra) {
+        return readExtraField(extra, LEGACY_TITLE_EXTRA_KEY);
+    }
+
+    function readTranslation(extra) {
+        return (
+            readExtraField(extra, TITLE_EXTRA_KEY)
+            || readLegacyTranslation(extra)
+        );
+    }
+
+    function clearTranslation(extra) {
+        return clearExtraFields(
+            extra,
+            [TITLE_EXTRA_KEY, LEGACY_TITLE_EXTRA_KEY]
+        );
+    }
+
+    function writeTranslation(extra, translation) {
+        return writeExtraField(
+            extra,
+            TITLE_EXTRA_KEY,
+            translation,
+            cleanTranslation,
+            [LEGACY_TITLE_EXTRA_KEY]
+        );
+    }
+
+    function cleanAbstractTranslation(value) {
+        const output = normalizeOneLine(decodeHTMLEntities(value))
+            .replace(
+                /^(?:摘要翻译|摘要译文|翻译|译文|abstract translation)\s*[:：]\s*/i,
+                ""
+            )
+            .trim();
+        if (!output) {
+            throw new Error("翻译服务未返回可用的摘要译文。");
+        }
+        return output;
+    }
+
+    function readAbstractTranslation(extra) {
+        return readExtraField(extra, ABSTRACT_EXTRA_KEY);
+    }
+
+    function writeAbstractTranslation(extra, translation) {
+        return writeExtraField(
+            extra,
+            ABSTRACT_EXTRA_KEY,
+            translation,
+            cleanAbstractTranslation
+        );
+    }
+
+    function clearAbstractTranslation(extra) {
+        return clearExtraFields(extra, [ABSTRACT_EXTRA_KEY]);
     }
 
     function isMostlyChinese(text) {
@@ -894,22 +949,35 @@
         return `${base}/models/${encodeURIComponent(cleanModel)}:generateContent`;
     }
 
-    function academicTranslationInstruction(terminologyEntries = []) {
-        return (
-            "Translate the academic publication title into Simplified Chinese. "
-            + "Preserve chemical formulas, gene and protein symbols, Latin binomials, "
-            + "drug names, abbreviations, units, trial names, uncertainty expressions, "
-            + "and meaningful punctuation. Do not add, omit, summarize, or explain. "
-            + "Return only the translated title without labels or quotation marks."
-            + terminologyInstruction(terminologyEntries)
-        );
+    function academicTranslationInstruction(
+        terminologyEntries = [],
+        contentKind = "title"
+    ) {
+        const instruction = contentKind === "abstract"
+            ? (
+                "Translate the academic publication abstract into Simplified Chinese. "
+                + "Preserve sentence order, technical meaning, chemical formulas, gene "
+                + "and protein symbols, Latin binomials, drug names, abbreviations, "
+                + "units, statistics, and uncertainty expressions. Do not summarize, "
+                + "omit, expand, explain, or add headings. Return only the complete "
+                + "translated abstract."
+            )
+            : (
+                "Translate the academic publication title into Simplified Chinese. "
+                + "Preserve chemical formulas, gene and protein symbols, Latin binomials, "
+                + "drug names, abbreviations, units, trial names, uncertainty expressions, "
+                + "and meaningful punctuation. Do not add, omit, summarize, or explain. "
+                + "Return only the translated title without labels or quotation marks."
+            );
+        return instruction + terminologyInstruction(terminologyEntries);
     }
 
     function buildGenericChatPayload(
         model,
         title,
         extra = {},
-        terminologyEntries = []
+        terminologyEntries = [],
+        contentKind = "title"
     ) {
         const cleanModel = requireValue(model, "尚未设置模型名称。");
         const cleanTitle = normalizeOneLine(title);
@@ -923,7 +991,7 @@
                 messages: [
                     {
                         role: "system",
-                        content: academicTranslationInstruction(terminologyEntries)
+                        content: academicTranslationInstruction(terminologyEntries, contentKind)
                     },
                     {
                         role: "user",
@@ -932,7 +1000,7 @@
                 ],
                 stream: false,
                 temperature: 0,
-                max_tokens: 256
+                max_tokens: contentKind === "abstract" ? 4096 : 256
             },
             extra
         );
@@ -942,7 +1010,8 @@
         model,
         title,
         extra = {},
-        terminologyEntries = []
+        terminologyEntries = [],
+        contentKind = "title"
     ) {
         const cleanModel = requireValue(model, "尚未设置 Qwen-MT 模型。");
         const cleanTitle = normalizeOneLine(title);
@@ -963,10 +1032,20 @@
                     source_lang: "auto",
                     target_lang: "Chinese",
                     domains:
-                        "Academic and biomedical literature titles. Preserve gene and "
-                        + "protein symbols, chemical formulas, drug names, abbreviations, "
-                        + "units, trial names, and uncertainty expressions. Return only "
-                        + "the complete translated title."
+                        (contentKind === "abstract"
+                            ? (
+                                "Academic and biomedical publication abstracts. Preserve "
+                                + "technical meaning, gene and protein symbols, chemical "
+                                + "formulas, drug names, abbreviations, units, statistics, "
+                                + "and uncertainty expressions. Return only the complete "
+                                + "translated abstract without summary or explanation."
+                            )
+                            : (
+                                "Academic and biomedical literature titles. Preserve gene and "
+                                + "protein symbols, chemical formulas, drug names, abbreviations, "
+                                + "units, trial names, and uncertainty expressions. Return only "
+                                + "the complete translated title."
+                            ))
                         + terminologyInstruction(terminologyEntries)
                 }
             };
@@ -976,7 +1055,8 @@
             cleanModel,
             cleanTitle,
             extra,
-            terminologyEntries
+            terminologyEntries,
+            contentKind
         );
     }
 
@@ -1037,7 +1117,7 @@
         return `${host}/v2/translate`;
     }
 
-    function buildDeepLPayload(title) {
+    function buildDeepLPayload(title, contentKind = "title") {
         const cleanTitle = normalizeOneLine(title);
         if (!cleanTitle) {
             throw new Error("标题为空。");
@@ -1045,7 +1125,7 @@
         return {
             text: [cleanTitle],
             target_lang: "ZH-HANS",
-            split_sentences: "0",
+            split_sentences: contentKind === "abstract" ? "1" : "0",
             preserve_formatting: true
         };
     }
@@ -1112,7 +1192,8 @@
         title,
         sourceLanguageName = "English",
         sourceLanguageCode = "en",
-        terminologyEntries = []
+        terminologyEntries = [],
+        contentKind = "title"
     }) {
         const cleanModel = requireValue(model, "尚未设置 Ollama 模型。");
         const cleanTitle = normalizeOneLine(title);
@@ -1132,7 +1213,7 @@
                     content:
                         `You are a professional ${sourceName} (${sourceCode}) `
                         + "to Chinese (Simplified) (zh-Hans) translator. "
-                        + academicTranslationInstruction(terminologyEntries)
+                        + academicTranslationInstruction(terminologyEntries, contentKind)
                         + `\n\n\n${cleanTitle}`
                 }
             ];
@@ -1141,7 +1222,7 @@
             messages = [
                 {
                     role: "system",
-                    content: academicTranslationInstruction(terminologyEntries)
+                    content: academicTranslationInstruction(terminologyEntries, contentKind)
                 },
                 {
                     role: "user",
@@ -1160,7 +1241,11 @@
         };
     }
 
-    function buildGeminiPayload(title, terminologyEntries = []) {
+    function buildGeminiPayload(
+        title,
+        terminologyEntries = [],
+        contentKind = "title"
+    ) {
         const cleanTitle = normalizeOneLine(title);
         if (!cleanTitle) {
             throw new Error("标题为空。");
@@ -1168,7 +1253,7 @@
 
         return {
             system_instruction: {
-                parts: [{ text: academicTranslationInstruction(terminologyEntries) }]
+                parts: [{ text: academicTranslationInstruction(terminologyEntries, contentKind) }]
             },
             contents: [
                 {
@@ -1178,7 +1263,7 @@
             ],
             generationConfig: {
                 temperature: 0,
-                maxOutputTokens: 256
+                maxOutputTokens: contentKind === "abstract" ? 4096 : 256
             }
         };
     }
@@ -1775,6 +1860,9 @@
 
     return {
         EXTRA_KEY,
+        LEGACY_TITLE_EXTRA_KEY,
+        TITLE_EXTRA_KEY,
+        ABSTRACT_EXTRA_KEY,
         PROVIDERS,
         normalizeProvider,
         normalizeOneLine,
@@ -1793,9 +1881,15 @@
         applyTerminology,
         decodeHTMLEntities,
         cleanTranslation,
+        cleanAbstractTranslation,
+        readExtraField,
+        readLegacyTranslation,
         readTranslation,
         writeTranslation,
         clearTranslation,
+        readAbstractTranslation,
+        writeAbstractTranslation,
+        clearAbstractTranslation,
         isMostlyChinese,
         getChineseDisplayTitle,
         utf8ByteLength,

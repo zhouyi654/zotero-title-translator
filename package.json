@@ -1,10 +1,10 @@
 {
   "name": "zotero-title-translator",
-  "version": "0.3.8",
+  "version": "0.3.10",
   "private": true,
-  "description": "Zotero 9 文献标题翻译与 PDF2zh Next 术语桥接插件",
+  "description": "Zotero 9 文献标题与摘要翻译及 PDF2zh Next 术语桥接插件",
   "scripts": {
-    "test": "node --check bootstrap.js && node --check core.js && node --check content/preferences.js && node tests/core.test.js && node tests/v030.test.js && node tests/v031.test.js && node tests/v032.test.js && node tests/v033.test.js && node tests/v034.test.js && node tests/v035.test.js && node tests/v036.test.js && node tests/v037.test.js && node tests/v038.test.js",
+    "test": "node --check bootstrap.js && node --check core.js && node --check content/preferences.js && node tests/core.test.js && node tests/v030.test.js && node tests/v031.test.js && node tests/v032.test.js && node tests/v033.test.js && node tests/v034.test.js && node tests/v035.test.js && node tests/v036.test.js && node tests/v037.test.js && node tests/v038.test.js && node tests/v039.test.js && node tests/v0310.test.js",
     "build": "python build_xpi.py"
   },
   "engines": {

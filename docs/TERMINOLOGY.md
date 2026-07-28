@@ -11,7 +11,7 @@
 修改只影响 `Extra` 中的：
 
 ```text
-ZoteroTitleTranslation: 中文译题
+titleTranslation: 中文译题
 ```
 
 不会改动原始 `title` 字段，也不会删除 `Extra` 中的 DOI、PMID、Citation Key 等其他内容。

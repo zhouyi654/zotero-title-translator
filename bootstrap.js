@@ -5,7 +5,10 @@ var ZTTGlobal = this;
 const ZTT_PLUGIN_ID = "zotero-title-translator@zhouyi654.github.io";
 const ZTT_PREF_PREFIX = "extensions.zotero.titleTranslator.";
 const ZTT_COLUMN_DATA_KEY = "titleTranslation";
-const ZTT_MIGRATION_VERSION = 5;
+const ZTT_MIGRATION_VERSION = 6;
+const ZTT_PDF_TRANSLATE_PLUGIN_ID = "zoteropdftranslate@euclpts.com";
+const ZTT_TITLE_INFO_ROW_ID = "titleTranslation";
+const ZTT_ABSTRACT_INFO_ROW_ID = "abstractTranslation";
 
 async function startup({ id, version, rootURI }, reason) {
     await Zotero.initializationPromise;
@@ -73,6 +76,8 @@ function createTitleTranslator(rootURI) {
     let pdf2zhHookRetryGeneration = 0;
     let lastPdf2zhBridgeWarning = "";
     let lastPdf2zhBridgeSuccessSignature = "";
+    let sidebarRowReorderGeneration = 0;
+    let sidebarRowReorderState = null;
 
     const menuIconURI = rootURI + "icons/menu.svg";
 
@@ -500,7 +505,7 @@ function createTitleTranslator(rootURI) {
         if (!state) {
             state = {
                 schemaVersion: 2,
-                pluginVersion: "0.3.8",
+                pluginVersion: "0.3.9",
                 configPath: paths.configPath,
                 glossaryPath: paths.glossaryPath,
                 originalAssignments:
@@ -514,7 +519,7 @@ function createTitleTranslator(rootURI) {
         }
         else {
             state.schemaVersion = 2;
-            state.pluginVersion = "0.3.8";
+            state.pluginVersion = "0.3.9";
             state.originalAssignments =
                 state.originalAssignments || {};
             for (const key of [
@@ -1156,10 +1161,17 @@ function createTitleTranslator(rootURI) {
         state.forceNode.disabled = busy || !hasItems;
         state.clearNode.disabled = busy || !hasItems;
         state.editNode.disabled = busy || !hasSingleItem;
+        state.translateAbstractNode.disabled = busy || !hasItems;
+        state.forceAbstractNode.disabled = busy || !hasItems;
+        state.clearAbstractNode.disabled = busy || !hasItems;
 
         state.translateNode.setAttribute(
             "label",
             busy ? "正在翻译标题…" : "翻译标题（跳过已有译题）"
+        );
+        state.translateAbstractNode.setAttribute(
+            "label",
+            busy ? "正在翻译摘要…" : "翻译摘要（跳过已有译文）"
         );
     }
 
@@ -1531,6 +1543,7 @@ function createTitleTranslator(rootURI) {
         model,
         title,
         timeoutMs,
+        contentKind = "title",
         endpointBuilder = ZoteroTitleTranslatorCore.buildChatEndpoint,
         payloadBuilder = ZoteroTitleTranslatorCore.buildGenericChatPayload,
         extra = {},
@@ -1542,7 +1555,8 @@ function createTitleTranslator(rootURI) {
             model,
             title,
             extra,
-            terminologyEntries
+            terminologyEntries,
+            contentKind
         );
         const headers = Object.assign(
             {},
@@ -1566,7 +1580,8 @@ function createTitleTranslator(rootURI) {
     async function requestTranslationOnce(
         title,
         provider,
-        terminologyEntries = []
+        terminologyEntries = [],
+        contentKind = "title"
     ) {
         const timeoutMs = Math.max(
             5000,
@@ -1619,7 +1634,7 @@ function createTitleTranslator(rootURI) {
                     ZoteroTitleTranslatorCore.buildDeepLEndpoint(
                         pref("deeplPlan", "free")
                     ),
-                    ZoteroTitleTranslatorCore.buildDeepLPayload(title),
+                    ZoteroTitleTranslatorCore.buildDeepLPayload(title, contentKind),
                     {
                         Authorization:
                             `DeepL-Auth-Key ${String(
@@ -1699,7 +1714,8 @@ function createTitleTranslator(rootURI) {
                             "sourceLanguageCode",
                             "en"
                         ),
-                        terminologyEntries
+                        terminologyEntries,
+                        contentKind
                     }),
                     {},
                     timeoutMs
@@ -1722,7 +1738,8 @@ function createTitleTranslator(rootURI) {
                     additionalHeaders: {
                         "X-DashScope-Wait-Timeout": "30"
                     },
-                    terminologyEntries
+                    terminologyEntries,
+                    contentKind
                 });
 
             case "siliconflow":
@@ -1735,7 +1752,8 @@ function createTitleTranslator(rootURI) {
                     extra: {
                         enable_thinking: false
                     },
-                    terminologyEntries
+                    terminologyEntries,
+                    contentKind
                 });
 
             case "volcengine":
@@ -1748,7 +1766,8 @@ function createTitleTranslator(rootURI) {
                     extra: {
                         thinking: { type: "disabled" }
                     },
-                    terminologyEntries
+                    terminologyEntries,
+                    contentKind
                 });
 
             case "deepseek":
@@ -1761,7 +1780,8 @@ function createTitleTranslator(rootURI) {
                     extra: {
                         thinking: { type: "disabled" }
                     },
-                    terminologyEntries
+                    terminologyEntries,
+                    contentKind
                 });
 
             case "gemini": {
@@ -1775,7 +1795,8 @@ function createTitleTranslator(rootURI) {
                     ZoteroTitleTranslatorCore
                         .buildGeminiPayload(
                             title,
-                            terminologyEntries
+                            terminologyEntries,
+                            contentKind
                         ),
                     {
                         "x-goog-api-key": String(
@@ -1795,7 +1816,8 @@ function createTitleTranslator(rootURI) {
                     model: pref("openaiModel", ""),
                     title,
                     timeoutMs,
-                    terminologyEntries
+                    terminologyEntries,
+                    contentKind
                 });
 
             case "custom":
@@ -1805,7 +1827,8 @@ function createTitleTranslator(rootURI) {
                     model: pref("customModel", ""),
                     title,
                     timeoutMs,
-                    terminologyEntries
+                    terminologyEntries,
+                    contentKind
                 });
 
             default:
@@ -1813,23 +1836,27 @@ function createTitleTranslator(rootURI) {
         }
     }
 
-    async function requestTranslation(title) {
+    async function requestTranslation(
+        text,
+        contentKind = "title"
+    ) {
         const provider = currentProvider();
         const terminologyEntries =
             ZoteroTitleTranslatorCore.matchingTerminologyEntries(
-                title,
+                text,
                 configuredTerminologyEntries()
             );
         const translation = await withProviderRetry(
             provider,
             () => requestTranslationOnce(
-                title,
+                text,
                 provider,
-                terminologyEntries
+                terminologyEntries,
+                contentKind
             )
         );
         return ZoteroTitleTranslatorCore.applyTerminology(
-            title,
+            text,
             translation,
             terminologyEntries
         );
@@ -1921,8 +1948,83 @@ function createTitleTranslator(rootURI) {
         };
     }
 
-    function autoTranslateEnabled() {
+    function classifyAbstractItems(items, force) {
+        const skipChinese = Boolean(pref("skipChinese", true));
+
+        let skippedExisting = 0;
+        let skippedChinese = 0;
+        let skippedEmpty = 0;
+        let skippedNotEditable = 0;
+        const workItems = [];
+
+        for (const item of items) {
+            if (!isEditableRegularItem(item)) {
+                skippedNotEditable++;
+                continue;
+            }
+
+            const abstractText =
+                ZoteroTitleTranslatorCore.normalizeOneLine(
+                    item.getField("abstractNote")
+                );
+            const existing =
+                ZoteroTitleTranslatorCore.readAbstractTranslation(
+                    item.getField("extra")
+                );
+
+            if (!abstractText) {
+                skippedEmpty++;
+                continue;
+            }
+            if (!force && existing) {
+                skippedExisting++;
+                continue;
+            }
+            if (
+                !force
+                && skipChinese
+                && ZoteroTitleTranslatorCore.isMostlyChinese(
+                    abstractText
+                )
+            ) {
+                skippedChinese++;
+                continue;
+            }
+
+            workItems.push({
+                item,
+                abstractText,
+                label:
+                    ZoteroTitleTranslatorCore.normalizeOneLine(
+                        item.getField("title")
+                    ) || `条目 ${item.id}`
+            });
+        }
+
+        return {
+            workItems,
+            skippedExisting,
+            skippedChinese,
+            skippedEmpty,
+            skippedNotEditable
+        };
+    }
+
+    function autoTranslateTitleEnabled() {
         return Boolean(pref("autoTranslateOnAdd", false));
+    }
+
+    function autoTranslateAbstractEnabled() {
+        return Boolean(
+            pref("autoTranslateAbstractOnAdd", false)
+        );
+    }
+
+    function autoTranslateEnabled() {
+        return (
+            autoTranslateTitleEnabled()
+            || autoTranslateAbstractEnabled()
+        );
     }
 
     function autoTranslateDelayMs() {
@@ -2033,18 +2135,28 @@ function createTitleTranslator(rootURI) {
                 return;
             }
 
-            const classified = classifyItems(items, false);
+            const titleClassified = autoTranslateTitleEnabled()
+                ? classifyItems(items, false)
+                : null;
+            const abstractClassified = autoTranslateAbstractEnabled()
+                ? classifyAbstractItems(items, false)
+                : null;
 
-            // 中文、空标题或已有译题不需要产生提示。
-            if (!classified.workItems.length) {
-                return;
+            if (titleClassified?.workItems.length) {
+                await executeTranslationBatch(
+                    Zotero.getMainWindow(),
+                    titleClassified,
+                    `自动翻译 ${titleClassified.workItems.length} 个新导入条目的标题`
+                );
             }
 
-            await executeTranslationBatch(
-                Zotero.getMainWindow(),
-                classified,
-                `自动翻译 ${classified.workItems.length} 个新导入条目`
-            );
+            if (abstractClassified?.workItems.length) {
+                await executeAbstractTranslationBatch(
+                    Zotero.getMainWindow(),
+                    abstractClassified,
+                    `自动翻译 ${abstractClassified.workItems.length} 个新导入条目的摘要`
+                );
+            }
         }
         catch (error) {
             logError(error);
@@ -2216,6 +2328,138 @@ function createTitleTranslator(rootURI) {
             busy = false;
             updateAllWindowMenus();
         }
+    }
+
+    async function executeAbstractTranslationBatch(
+        window,
+        classified,
+        scopeLabel
+    ) {
+        const {
+            workItems,
+            skippedExisting,
+            skippedChinese,
+            skippedEmpty,
+            skippedNotEditable
+        } = classified;
+
+        if (!workItems.length) {
+            showSilentNotification(
+                window,
+                "没有需要翻译的摘要",
+                [
+                    `处理范围：${scopeLabel}`,
+                    `已有摘要译文：${skippedExisting}`,
+                    `中文摘要：${skippedChinese}`,
+                    `空摘要：${skippedEmpty}`,
+                    `不可编辑或非普通条目：${skippedNotEditable}`
+                ]
+            );
+            return;
+        }
+
+        const provider = currentProvider();
+        const concurrency = effectiveConcurrency(provider);
+        let translated = 0;
+        const failures = [];
+
+        busy = true;
+        updateAllWindowMenus();
+
+        try {
+            const results = await mapLimit(
+                workItems,
+                concurrency,
+                async ({ item, abstractText }) => {
+                    const translation = await requestTranslation(
+                        abstractText,
+                        "abstract"
+                    );
+                    const oldExtra = item.getField("extra") || "";
+                    item.setField(
+                        "extra",
+                        ZoteroTitleTranslatorCore
+                            .writeAbstractTranslation(
+                                oldExtra,
+                                translation
+                            )
+                    );
+                    await item.saveTx();
+                    translated++;
+                    return translation;
+                }
+            );
+
+            results.forEach((result, index) => {
+                if (result.status !== "rejected") return;
+                const label = workItems[index].label;
+                const reason =
+                    result.reason?.message
+                    || result.reason?.toString?.()
+                    || "未知错误";
+                failures.push(`• ${label}\n  ${reason}`);
+                logError(result.reason);
+            });
+
+            const lines = [
+                `处理范围：${scopeLabel}`,
+                `翻译服务：${providerLabel(provider)}`,
+                `成功翻译摘要：${translated}`,
+                `跳过已有摘要译文：${skippedExisting}`,
+                `跳过中文摘要：${skippedChinese}`,
+                `跳过空摘要：${skippedEmpty}`,
+                `跳过不可编辑或非普通条目：${skippedNotEditable}`,
+                `失败：${failures.length}`
+            ];
+            if (failures.length) {
+                lines.push(
+                    "",
+                    "失败详情（最多显示 8 条）：",
+                    ...failures.slice(0, 8)
+                );
+            }
+            log(lines.join("\n"));
+
+            showSilentNotification(
+                window,
+                failures.length
+                    ? "摘要翻译完成（部分失败）"
+                    : "摘要翻译完成",
+                [
+                    `处理范围：${scopeLabel}`,
+                    `翻译服务：${providerLabel(provider)}`,
+                    `成功：${translated}；失败：${failures.length}`,
+                    `已有译文：${skippedExisting}`,
+                    `中文摘要：${skippedChinese}`,
+                    `空摘要：${skippedEmpty}`
+                ]
+            );
+        }
+        finally {
+            busy = false;
+            updateAllWindowMenus();
+        }
+    }
+
+    async function translateSelectedAbstract(window, force) {
+        if (busy) return;
+
+        const items = selectedRegularItems(window);
+        if (!items.length) {
+            alert(
+                window,
+                "摘要翻译",
+                "请先选择至少一个可编辑的普通文献条目。"
+            );
+            return;
+        }
+        if (!validateTranslationConfig(window)) return;
+
+        await executeAbstractTranslationBatch(
+            window,
+            classifyAbstractItems(items, force),
+            `所选 ${items.length} 个条目`
+        );
     }
 
     async function translateSelected(window, force) {
@@ -2454,6 +2698,269 @@ function createTitleTranslator(rootURI) {
         );
     }
 
+    async function clearSelectedAbstract(window) {
+        if (busy) return;
+
+        const items = selectedRegularItems(window);
+        if (!items.length) {
+            alert(
+                window,
+                "摘要翻译",
+                "请先选择至少一个可编辑的普通文献条目。"
+            );
+            return;
+        }
+
+        let cleared = 0;
+        for (const item of items) {
+            const oldExtra = item.getField("extra") || "";
+            if (
+                !ZoteroTitleTranslatorCore
+                    .readAbstractTranslation(oldExtra)
+            ) {
+                continue;
+            }
+            item.setField(
+                "extra",
+                ZoteroTitleTranslatorCore
+                    .clearAbstractTranslation(oldExtra)
+            );
+            await item.saveTx();
+            cleared++;
+        }
+
+        showSilentNotification(
+            window,
+            "摘要译文已清除",
+            [`已清除 ${cleared} 个条目的摘要译文。`]
+        );
+    }
+
+    async function migrateLegacyTitleTranslationFields() {
+        const migrationVersion = Number(
+            pref("extraFieldMigrationVersion", 0)
+        ) || 0;
+        if (migrationVersion >= 1) {
+            return;
+        }
+
+        let migrated = 0;
+        for (const library of Zotero.Libraries.getAll()) {
+            if (
+                !library
+                || library.archived
+                || library.editable === false
+            ) {
+                continue;
+            }
+
+            const items = await Zotero.Items.getAll(
+                library.libraryID,
+                true,
+                false
+            );
+            for (const item of items) {
+                if (!isEditableRegularItem(item)) {
+                    continue;
+                }
+                const oldExtra = item.getField("extra") || "";
+                const legacy = ZoteroTitleTranslatorCore
+                    .readLegacyTranslation(oldExtra);
+                const compatible = ZoteroTitleTranslatorCore
+                    .readExtraField(
+                        oldExtra,
+                        ZoteroTitleTranslatorCore.TITLE_EXTRA_KEY
+                    );
+                if (!legacy || compatible) {
+                    continue;
+                }
+
+                item.setField(
+                    "extra",
+                    ZoteroTitleTranslatorCore.writeTranslation(
+                        oldExtra,
+                        legacy
+                    )
+                );
+                await item.saveTx();
+                migrated++;
+            }
+        }
+
+        setPref("extraFieldMigrationVersion", 1);
+        if (migrated) {
+            Zotero.ItemTreeManager.refreshColumns();
+            log(
+                `已将 ${migrated} 条旧版标题译文迁移到 `
+                + "titleTranslation 兼容字段。"
+            );
+        }
+    }
+
+    function findTranslateForZoteroInfoRow(rowID) {
+        const manager = Zotero.ItemPaneManager?._infoRowManager;
+        const cache = manager?._optionsCache;
+        if (!cache) {
+            return null;
+        }
+
+        for (const [key, option] of Object.entries(cache)) {
+            if (!option || option.pluginID !== ZTT_PDF_TRANSLATE_PLUGIN_ID) {
+                continue;
+            }
+            const optionRowID = String(option.rowID || "");
+            if (
+                optionRowID === rowID
+                || String(key).endsWith(`-${rowID}`)
+                || String(key).endsWith(`.${rowID}`)
+            ) {
+                return {
+                    key,
+                    option: { ...option }
+                };
+            }
+        }
+        return null;
+    }
+
+    function safelyRegisterInfoRow(option) {
+        try {
+            return Zotero.ItemPaneManager.registerInfoRow(option);
+        }
+        catch (error) {
+            logError(error);
+            return false;
+        }
+    }
+
+    function safelyUnregisterInfoRow(rowKey) {
+        if (!rowKey) {
+            return false;
+        }
+        try {
+            return Zotero.ItemPaneManager.unregisterInfoRow(rowKey);
+        }
+        catch (error) {
+            logError(error);
+            return false;
+        }
+    }
+
+    function refreshSidebarTranslationRows(...rowKeys) {
+        for (const rowKey of rowKeys) {
+            if (!rowKey) continue;
+            try {
+                Zotero.ItemPaneManager.refreshInfoRow(rowKey);
+            }
+            catch (error) {
+                logError(error);
+            }
+        }
+    }
+
+    function reorderTranslateForZoteroInfoRows() {
+        if (
+            !pluginActive
+            || sidebarRowReorderState
+            || !Zotero.ItemPaneManager?.registerInfoRow
+        ) {
+            return Boolean(sidebarRowReorderState);
+        }
+
+        const titleRow = findTranslateForZoteroInfoRow(
+            ZTT_TITLE_INFO_ROW_ID
+        );
+        const abstractRow = findTranslateForZoteroInfoRow(
+            ZTT_ABSTRACT_INFO_ROW_ID
+        );
+        if (!titleRow || !abstractRow) {
+            return false;
+        }
+
+        const originalTitle = {
+            key: titleRow.key,
+            option: { ...titleRow.option }
+        };
+        const originalAbstract = {
+            key: abstractRow.key,
+            option: { ...abstractRow.option }
+        };
+
+        // Re-register both rows in one group. Zotero keeps registration order
+        // within the same `position`, so the abstract row follows the title row.
+        safelyUnregisterInfoRow(originalAbstract.key);
+        safelyUnregisterInfoRow(originalTitle.key);
+
+        const titleKey = safelyRegisterInfoRow({
+            ...originalTitle.option,
+            position: "start"
+        });
+        const abstractKey = safelyRegisterInfoRow({
+            ...originalAbstract.option,
+            position: "start"
+        });
+
+        if (!titleKey || !abstractKey) {
+            safelyUnregisterInfoRow(titleKey);
+            safelyUnregisterInfoRow(abstractKey);
+            safelyRegisterInfoRow(originalTitle.option);
+            safelyRegisterInfoRow(originalAbstract.option);
+            return false;
+        }
+
+        sidebarRowReorderState = {
+            titleKey,
+            abstractKey,
+            originalTitle,
+            originalAbstract
+        };
+        refreshSidebarTranslationRows(titleKey, abstractKey);
+        log(
+            "已将 Translate for Zotero 的摘要翻译移动到标题翻译下方。"
+        );
+        return true;
+    }
+
+    function restoreTranslateForZoteroInfoRows() {
+        const state = sidebarRowReorderState;
+        if (!state) {
+            return;
+        }
+        sidebarRowReorderState = null;
+
+        safelyUnregisterInfoRow(state.abstractKey);
+        safelyUnregisterInfoRow(state.titleKey);
+
+        const titleKey = safelyRegisterInfoRow(
+            state.originalTitle.option
+        );
+        const abstractKey = safelyRegisterInfoRow(
+            state.originalAbstract.option
+        );
+        refreshSidebarTranslationRows(titleKey, abstractKey);
+    }
+
+    async function scheduleSidebarTranslationRowReorder() {
+        const generation = ++sidebarRowReorderGeneration;
+        for (let attempt = 0; attempt < 20; attempt++) {
+            if (
+                !pluginActive
+                || generation !== sidebarRowReorderGeneration
+                || sidebarRowReorderState
+            ) {
+                return;
+            }
+            if (reorderTranslateForZoteroInfoRows()) {
+                return;
+            }
+            await Zotero.Promise.delay(attempt < 5 ? 500 : 1500);
+        }
+        log(
+            "未检测到 Translate for Zotero 的标题/摘要信息行，"
+            + "未执行侧边栏排序。"
+        );
+    }
+
     function registerOfficialMenus() {
         if (!Zotero.MenuManager?.registerMenu) {
             log("Zotero.MenuManager.registerMenu 不可用，启用 DOM 回退。");
@@ -2637,6 +3144,7 @@ function createTitleTranslator(rootURI) {
     async function onMainWindowLoad(window) {
         if (!window || windowState.has(window)) return;
         installPdf2zhBridgeHook();
+        scheduleSidebarTranslationRowReorder().catch(logError);
 
         const document = window.document;
         const itemPopup = document.getElementById("zotero-itemmenu");
@@ -2674,13 +3182,41 @@ function createTitleTranslator(rootURI) {
             "清除标题译文",
             () => clearSelected(window).catch(logError)
         );
+        const abstractSeparator = document.createXULElement(
+            "menuseparator"
+        );
+        abstractSeparator.id = "ztt-abstract-context-separator";
+        const translateAbstractNode = createMenuItem(
+            document,
+            "ztt-translate-abstract",
+            "翻译摘要（跳过已有译文）",
+            () => translateSelectedAbstract(window, false).catch(logError),
+            menuIconURI
+        );
+        const forceAbstractNode = createMenuItem(
+            document,
+            "ztt-force-translate-abstract",
+            "重新翻译摘要（覆盖已有译文）",
+            () => translateSelectedAbstract(window, true).catch(logError),
+            menuIconURI
+        );
+        const clearAbstractNode = createMenuItem(
+            document,
+            "ztt-clear-abstract-translation",
+            "清除摘要译文",
+            () => clearSelectedAbstract(window).catch(logError)
+        );
 
         itemPopup.append(
             separator,
             translateNode,
             forceNode,
             editNode,
-            clearNode
+            clearNode,
+            abstractSeparator,
+            translateAbstractNode,
+            forceAbstractNode,
+            clearAbstractNode
         );
 
         const onItemPopupShowing = () =>
@@ -2721,11 +3257,18 @@ function createTitleTranslator(rootURI) {
             forceNode,
             editNode,
             clearNode,
+            abstractSeparator,
+            translateAbstractNode,
+            forceAbstractNode,
+            clearAbstractNode,
             itemCommandNodes: [
                 translateNode,
                 forceNode,
                 editNode,
-                clearNode
+                clearNode,
+                translateAbstractNode,
+                forceAbstractNode,
+                clearAbstractNode
             ],
             onItemPopupShowing,
             onCollectionPopupShowing,
@@ -2760,6 +3303,10 @@ function createTitleTranslator(rootURI) {
             state.forceNode,
             state.editNode,
             state.clearNode,
+            state.abstractSeparator,
+            state.translateAbstractNode,
+            state.forceAbstractNode,
+            state.clearAbstractNode,
             state.fallbackLibraryNode,
             state.fallbackToolsNode
         ]) {
@@ -2811,6 +3358,10 @@ function createTitleTranslator(rootURI) {
         registerOfficialMenus();
         registerAutomaticTranslationObserver();
         schedulePdf2zhBridgeHook().catch(logError);
+        scheduleSidebarTranslationRowReorder().catch(logError);
+        Zotero.Promise.delay(1000)
+            .then(() => migrateLegacyTitleTranslationFields())
+            .catch(logError);
 
         log(
             `插件已启动；column=${registeredColumnKey}; `
@@ -2820,6 +3371,8 @@ function createTitleTranslator(rootURI) {
     }
 
     async function shutdown() {
+        sidebarRowReorderGeneration++;
+        restoreTranslateForZoteroInfoRows();
         pluginActive = false;
         autoTranslateScheduleGeneration++;
         autoTranslatePendingIDs.clear();
@@ -2855,10 +3408,12 @@ function createTitleTranslator(rootURI) {
         onMainWindowLoad,
         onMainWindowUnload,
         translateSelected,
+        translateSelectedAbstract,
         editSelectedTranslation,
         translateScope,
         translateCurrentScope,
         clearSelected,
+        clearSelectedAbstract,
         syncPdf2zhGlossary,
         restorePdf2zhBridge,
         getPdf2zhBridgeStatus,

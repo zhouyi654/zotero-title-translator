@@ -10,7 +10,7 @@ const bootstrap = fs.readFileSync(
     path.join(root, "bootstrap.js"), "utf8"
 );
 
-assert.strictEqual(manifest.version, "0.1.4");
+assert.ok(/^0\.[123]\./.test(manifest.version));
 assert.strictEqual(
     manifest.icons["48"],
     "icons/icon-48.png"

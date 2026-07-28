@@ -8,7 +8,7 @@ assert.strictEqual(
 
 assert.strictEqual(
     core.writeTranslation("DOI: 10.1/a", "“中文标题”"),
-    "DOI: 10.1/a\n\nZoteroTitleTranslation: 中文标题"
+    "DOI: 10.1/a\n\ntitleTranslation: 中文标题"
 );
 
 assert.strictEqual(

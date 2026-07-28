@@ -4,10 +4,12 @@
 [![GitHub Release](https://img.shields.io/github/v/release/zhouyi654/zotero-title-translator)](https://github.com/zhouyi654/zotero-title-translator/releases)
 [![许可证：MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-一个面向 **Zotero 9** 的开源标题翻译插件。插件不会覆盖文献的原始标题，而是在 Zotero 条目列表中增加 **“标题（中文）”** 列，用于统一显示中文标题。
+一个面向 **Zotero 9** 的开源标题与摘要翻译插件。插件不会覆盖文献的原始标题或摘要，而是在条目列表和信息侧边栏中显示独立的中文译文。
 
 - 中文文献：直接显示原始中文标题；
 - 外文文献：翻译后显示中文译题；
+- 标题译文同步到信息侧边栏的“标题翻译”字段；
+- 支持翻译摘要并同步到“摘要翻译”字段；
 - 原始 `title` 字段保持不变；
 - 支持单篇、多篇、所选分类和整个文献库翻译；
 - 支持导入文献后自动翻译，可由用户自行开启或关闭；
@@ -16,7 +18,7 @@
 - 支持在线 API、本地模型和自托管翻译服务；
 - 译题保存在 Zotero 条目的 `Extra` 字段中，可随条目同步。
 
-> 当前版本：**0.3.8**。项目仍处于早期公开阶段。建议先用少量文献测试服务配置，再执行分类或整库翻译。
+> 当前版本：**0.3.10**。项目仍处于早期公开阶段。建议先用少量文献测试服务配置，再执行分类或整库翻译。
 
 ---
 
@@ -31,6 +33,7 @@
 - [翻译整个文献库](#翻译整个文献库)
 - [导入后自动翻译](#导入后自动翻译)
 - [手动修改译题](#手动修改译题)
+- [侧边栏同步与摘要翻译](#侧边栏同步与摘要翻译)
 - [术语表与译后校正](#术语表与译后校正)
 - [支持的翻译服务](#支持的翻译服务)
 - [翻译服务配置示例](#翻译服务配置示例)
@@ -176,7 +179,7 @@ python build_xpi.py --check
 生成文件：
 
 ```text
-dist/zotero-title-translator-0.3.8.xpi
+dist/zotero-title-translator-0.3.10.xpi
 ```
 
 ---
@@ -240,7 +243,7 @@ dist/zotero-title-translator-0.3.8.xpi
 插件只删除：
 
 ```text
-ZoteroTitleTranslation: ...
+titleTranslation: ...
 ```
 
 不会删除 `Extra` 中的 DOI、PMID、Citation Key 或其他字段。
@@ -337,6 +340,58 @@ ZoteroTitleTranslation: ...
 
 对话框会预填当前译题。修改后保存即可；输入留空并确认可清除译题。
 该操作不会修改原始标题，也不会破坏 `Extra` 中的其他字段。
+
+## 侧边栏同步与摘要翻译
+
+### 标题翻译侧边栏同步
+
+0.3.10 起，标题译文保存为：
+
+```text
+titleTranslation: 中文译题
+```
+
+该字段与 Translate for Zotero 在 Zotero 信息侧边栏中使用的“标题翻译”字段一致。
+因此，无论译题是通过本插件生成，还是在侧边栏中手工修改，两处都会读取同一份数据。
+
+升级时，插件会将旧字段：
+
+```text
+ZoteroTitleTranslation: 中文译题
+```
+
+迁移为新的 `titleTranslation` 字段。原始 `title` 字段不会改变。
+
+### 摘要翻译
+
+选择一个或多个普通文献条目后，右键可执行：
+
+```text
+翻译摘要（跳过已有译文）
+重新翻译摘要（覆盖已有译文）
+清除摘要译文
+```
+
+摘要译文保存为：
+
+```text
+abstractTranslation: 中文摘要译文
+```
+
+安装并启用 Translate for Zotero 的“摘要翻译”信息行后，译文会显示在 Zotero
+信息侧边栏，并可在那里手工编辑。原始 `abstractNote` 字段保持不变。
+
+摘要比标题长得多，远程 API 的 token 消耗、超时和费用也更高。建议先选择一篇文献测试。
+MyMemory 等具有较低单次长度限制的服务不适合长摘要。
+
+### 导入后自动翻译摘要
+
+设置中新增“导入后同时自动翻译摘要”开关，默认关闭。它与标题自动翻译分开控制：
+
+- 仅开启标题自动翻译：新导入文献只翻译标题；
+- 仅开启摘要自动翻译：新导入文献只翻译已有的外文摘要；
+- 两者都开启：依次翻译标题和摘要；
+- 没有摘要、摘要已是中文或已有摘要译文时自动跳过。
 
 ## 术语表与译后校正
 
@@ -493,7 +548,7 @@ API Key：你的 API Key
 外文标题的译题保存在 Zotero 条目的 `Extra` 字段：
 
 ```text
-ZoteroTitleTranslation: 中文译题
+titleTranslation: 中文译题
 ```
 
 这样做的原因：
@@ -621,7 +676,7 @@ python build_xpi.py --check
 输出：
 
 ```text
-dist/zotero-title-translator-0.3.8.xpi
+dist/zotero-title-translator-0.3.10.xpi
 ```
 
 测试覆盖：
@@ -782,3 +837,30 @@ PDF2zh 的 XPI、右键菜单、服务端源码和翻译结果处理均不被替
 4. 点击“立即同步术语”；
 5. 确认状态区显示“配置引用术语：是”和“忽略旧缓存：已启用”；
 6. 再使用 PDF2zh 翻译。
+
+
+## 0.3.10：侧边栏同步与摘要翻译
+
+- 标题译文改用 `titleTranslation`，与 Translate for Zotero 的“标题翻译”侧边栏字段同步；
+- 自动迁移旧版 `ZoteroTitleTranslation` 数据；
+- 新增摘要翻译、重新翻译和清除命令；
+- 摘要译文保存为 `abstractTranslation`，可显示在“摘要翻译”侧边栏字段；
+- 新增“导入后同时自动翻译摘要”开关，默认关闭；
+- 原始标题和原始摘要均保持不变。
+
+
+## 0.3.10：侧边栏译文顺序
+
+当 Translate for Zotero 同时启用“标题翻译”和“摘要翻译”信息行时，
+插件会在运行时重新注册这两个信息行，使其都位于“信息”区域顶部，并按以下顺序显示：
+
+```text
+标题翻译
+摘要翻译
+标题
+作者
+……
+```
+
+该调整只改变当前 Zotero 会话中的信息行顺序，不修改 Translate for Zotero 的 XPI、源码或设置。
+禁用本插件时会恢复 Translate for Zotero 原来的信息行位置。

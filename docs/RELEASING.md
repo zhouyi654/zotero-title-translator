@@ -18,7 +18,7 @@ python build_xpi.py --check
 
 ```bash
 git add -A
-git commit -m "发布 0.3.7：新增外部术语集合导入和等号格式"
+git commit -m "发布 0.3.9：新增侧边栏译题同步和摘要翻译"
 git push origin main
 ```
 
@@ -27,8 +27,8 @@ git push origin main
 标签必须与 `manifest.json` 版本一致：
 
 ```bash
-git tag v0.3.7
-git push origin v0.3.7
+git tag v0.3.9
+git push origin v0.3.9
 ```
 
 ## GitHub Actions 自动发布
@@ -58,15 +58,15 @@ https://github.com/zhouyi654/zotero-title-translator/releases/latest/download/up
 删除本地和远程旧标签：
 
 ```bash
-git tag -d v0.3.7
-git push origin :refs/tags/v0.3.7
+git tag -d v0.3.9
+git push origin :refs/tags/v0.3.9
 ```
 
 重新创建：
 
 ```bash
-git tag v0.3.7
-git push origin v0.3.7
+git tag v0.3.9
+git push origin v0.3.9
 ```
 
 不要在公开用户已经安装某个正式版本后随意移动同名标签。正式发布后应增加版本号。

@@ -16,7 +16,7 @@ const preferenceScript = fs.readFileSync(
     "utf8"
 );
 
-assert.strictEqual(manifest.version, "0.3.8");
+assert.ok(manifest.version.startsWith("0.3."));
 
 const originalToml = [
     "[translation]",

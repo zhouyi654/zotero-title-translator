@@ -27,7 +27,7 @@ prefs.js
 5. 确认 `.github` 和 `.gitignore` 也被复制；
 6. 在 GitHub Desktop 中检查 Changes；
 7. 提交说明填写：
-   `发布 0.3.7：新增 PDF2zh Next 术语桥接`
+   `发布 0.3.9：新增侧边栏译题同步和摘要翻译`
 8. 点击 Commit to main；
 9. 点击 Push origin。
 
@@ -44,15 +44,15 @@ cd 你的仓库路径\zotero-title-translator
 ```powershell
 git status
 git add -A
-git commit -m "发布 0.3.7：新增 PDF2zh Next 术语桥接"
+git commit -m "发布 0.3.9：新增侧边栏译题同步和摘要翻译"
 git push origin main
 ```
 
-## 发布 0.3.7
+## 发布 0.3.9
 
 ```powershell
-git tag v0.3.7
-git push origin v0.3.7
+git tag v0.3.9
+git push origin v0.3.9
 ```
 
 标签推送后，打开 GitHub 仓库的 Actions 页面检查 Release 工作流。
