@@ -10,6 +10,10 @@ An open-source translation plugin for **Zotero 9**. It translates publication ti
 
 **Compatibility: Zotero 9.0.x.** The manifest intentionally uses `strict_max_version: 9.0.*`, so compatibility is only declared for the latest minor line that has actually been tested.
 
+**Install now:** [Open the latest release](https://github.com/zhouyi654/zotero-title-translator/releases/latest), download `zotero-title-translator-<version>.xpi`, then install it from Zotero **Tools → Plugins → Install Add-on From File…**.
+
+> Do not download GitHub's generated `Source code` archives. The Zotero install package is the `.xpi` file.
+
 > Current version: **0.3.11**. The project is still in an early public stage. Test your provider configuration with a small number of items before running collection- or library-wide translation.
 
 ## Features

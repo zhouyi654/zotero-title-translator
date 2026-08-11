@@ -10,7 +10,9 @@
 
 **兼容范围：Zotero 9.0.x。** 插件清单使用 `strict_max_version: 9.0.*`，只声明已经测试过的 minor 版本；后续 Zotero 9.x minor 版本应在实际测试后再更新兼容范围。
 
-**安装入口：** [GitHub Releases](https://github.com/zhouyi654/zotero-title-translator/releases) → 下载最新的 `zotero-title-translator-<version>.xpi`。
+**立即安装：** [打开 Latest Release](https://github.com/zhouyi654/zotero-title-translator/releases/latest) → 下载其中的 `zotero-title-translator-<version>.xpi` → Zotero **工具 → 插件 → 从文件安装插件**。
+
+> 不要下载 GitHub 自动生成的 `Source code (zip/tar.gz)`；Zotero 安装包是 `.xpi`。
 
 - 中文文献：直接显示原始中文标题；
 - 外文文献：翻译后显示中文译题；
