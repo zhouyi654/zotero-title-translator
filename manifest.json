@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Zotero 标题翻译",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "description": "Zotero 9 文献标题与摘要翻译插件：支持侧边栏译文相邻显示、分类和自动翻译、术语集合及 PDF2zh Next 术语桥接。",
   "author": "zhouyi654",
   "applications": {

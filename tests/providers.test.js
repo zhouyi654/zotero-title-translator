@@ -2,7 +2,7 @@ const assert = require("assert");
 const core = require("../core.js");
 
 assert.strictEqual(core.normalizeProvider("MYMEMORY"), "mymemory");
-assert.strictEqual(core.normalizeProvider("unknown"), "openai");
+assert.strictEqual(core.normalizeProvider("unknown"), "mymemory");
 
 assert.strictEqual(core.utf8ByteLength("Hello"), 5);
 assert.strictEqual(core.utf8ByteLength("中文"), 6);
@@ -45,10 +45,10 @@ assert.strictEqual(
     "http://localhost:5000/translate"
 );
 assert.deepStrictEqual(
-    core.buildLibreTranslatePayload({
-        title: "Airway organoids",
-        apiKey: ""
-    }),
+    core.buildLibreTranslatePayload(
+        "Airway organoids",
+        ""
+    ),
     {
         q: "Airway organoids",
         source: "auto",

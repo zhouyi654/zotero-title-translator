@@ -15,6 +15,8 @@ EXCLUDED_TOP_LEVEL = {
     "dist",
     "tests",
     "examples",
+    "scripts",
+    "docs",
     "__pycache__",
 }
 
@@ -27,6 +29,8 @@ EXCLUDED_FILES = {
     "PRIVACY.md",
     "CONTRIBUTING.md",
     "CHANGELOG.md",
+    "README.md",
+    "README_EN.md",
 }
 
 def plugin_files() -> list[Path]:
@@ -69,6 +73,18 @@ def build() -> Path:
         ):
             if required not in names:
                 raise RuntimeError(f"Missing required file: {required}")
+
+        forbidden_prefixes = ("scripts/", "tests/", "docs/", ".github/")
+        forbidden_files = {"package.json", "build_xpi.py", "README.md", "README_EN.md"}
+        leaked = sorted(
+            name
+            for name in names
+            if name in forbidden_files or name.startswith(forbidden_prefixes)
+        )
+        if leaked:
+            raise RuntimeError(
+                "Development/release files leaked into XPI: " + ", ".join(leaked)
+            )
 
     return output
 

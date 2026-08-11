@@ -1,10 +1,16 @@
 # Zotero 标题翻译
 
+[English](README_EN.md) | 中文
+
 [![CI](https://github.com/zhouyi654/zotero-title-translator/actions/workflows/ci.yml/badge.svg)](https://github.com/zhouyi654/zotero-title-translator/actions/workflows/ci.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/zhouyi654/zotero-title-translator)](https://github.com/zhouyi654/zotero-title-translator/releases)
 [![许可证：MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 一个面向 **Zotero 9** 的开源标题与摘要翻译插件。插件不会覆盖文献的原始标题或摘要，而是在条目列表和信息侧边栏中显示独立的中文译文。
+
+**兼容范围：Zotero 9.0.x。** 插件清单使用 `strict_max_version: 9.0.*`，只声明已经测试过的 minor 版本；后续 Zotero 9.x minor 版本应在实际测试后再更新兼容范围。
+
+**安装入口：** [GitHub Releases](https://github.com/zhouyi654/zotero-title-translator/releases) → 下载最新的 `zotero-title-translator-<version>.xpi`。
 
 - 中文文献：直接显示原始中文标题；
 - 外文文献：翻译后显示中文译题；
@@ -18,7 +24,7 @@
 - 支持在线 API、本地模型和自托管翻译服务；
 - 译题保存在 Zotero 条目的 `Extra` 字段中，可随条目同步。
 
-> 当前版本：**0.3.10**。项目仍处于早期公开阶段。建议先用少量文献测试服务配置，再执行分类或整库翻译。
+> 当前版本：**0.3.11**。项目仍处于早期公开阶段。建议先用少量文献测试服务配置，再执行分类或整库翻译。
 
 ---
 
@@ -179,7 +185,7 @@ python build_xpi.py --check
 生成文件：
 
 ```text
-dist/zotero-title-translator-0.3.10.xpi
+dist/zotero-title-translator-0.3.11.xpi
 ```
 
 ---
@@ -582,17 +588,18 @@ titleTranslation: 中文译题
 
 ## 隐私与 API Key
 
-插件只读取并发送待翻译的标题，不主动发送：
+插件仅处理用户主动要求翻译的标题；当用户执行摘要翻译或开启摘要自动翻译时，也会处理对应摘要。待翻译的标题或摘要会发送给用户选择的翻译服务。
 
-- PDF；
-- 摘要；
-- 作者；
+插件不会主动发送：
+
+- PDF 文件；
+- 作者信息；
 - 笔记；
 - 批注；
 - 整个 Zotero 数据库；
 - Zotero 账号密码。
 
-本机 Ollama 和本机 LibreTranslate 可以让标题留在本地。使用远程服务时，标题会发送给相应服务商。
+本机 Ollama 和本机 LibreTranslate 可以让标题或摘要留在本机处理。使用远程服务时，待翻译的标题或摘要会发送给相应服务商。
 
 API Key 当前保存在本机 Zotero 首选项中，没有由插件进行额外加密。它不会发送给本项目作者，但可访问本地 Zotero 配置的程序或人员可能读取密钥。
 
@@ -667,17 +674,29 @@ API Key 当前保存在本机 Zotero 首选项中，没有由插件进行额外�
 npm test
 ```
 
-### 构建
+### 构建与发布校验
 
 ```bash
-python build_xpi.py --check
+npm run release:check
+npm run build
+npm run release:manifest
+npm run release:verify
 ```
 
 输出：
 
 ```text
-dist/zotero-title-translator-0.3.10.xpi
+dist/zotero-title-translator-0.3.11.xpi
+dist/updates.json
 ```
+
+如果仓库尚未安装 GitHub Actions 工作流，可运行一次：
+
+```bash
+npm run workflows:install
+```
+
+该命令会从 `scripts/workflow_templates/` 安装 `.github/workflows/ci.yml` 和 `.github/workflows/release.yml`。
 
 测试覆盖：
 
@@ -706,9 +725,12 @@ dist/zotero-title-translator-0.3.10.xpi
 content/
 docs/
 icons/
+scripts/
 tests/
 README.md
+README_EN.md
 manifest.json
+package.json
 bootstrap.js
 core.js
 prefs.js

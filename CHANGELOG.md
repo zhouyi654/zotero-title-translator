@@ -1,7 +1,12 @@
 # 更新日志
 
-## 0.3.10
+## 0.3.11
 
+- 完善公开发布工程：新增中英文 README、发布元数据校验、`updates.json` 自动生成、GitHub Actions 工作流模板与安装脚本。
+- XPI 构建现在排除 `scripts/`、`docs/`、测试和发布文件，并在构建后检查开发文件是否误打包。
+- 发布校验强制要求 `manifest.json` / `package.json` 版本一致，并保持 Zotero `strict_max_version` 为已测试 minor 版本的 `x.x.*` 形式。
+
+## 0.3.10
 - 将 Translate for Zotero 的“摘要翻译”信息行移动到“标题翻译”正下方。
 - 标题译文和摘要译文均显示在信息区域顶部。
 - 仅在运行时重新注册信息行，不修改其他插件文件或持久设置。

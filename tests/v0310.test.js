@@ -6,7 +6,7 @@ const manifest = JSON.parse(
 );
 const bootstrap = fs.readFileSync("bootstrap.js", "utf8");
 
-assert.strictEqual(manifest.version, "0.3.10");
+assert.ok(/^\d+\.\d+\.\d+$/.test(manifest.version));
 assert.ok(
     bootstrap.includes("reorderTranslateForZoteroInfoRows")
 );

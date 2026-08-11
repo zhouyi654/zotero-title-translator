@@ -1,11 +1,15 @@
 {
   "name": "zotero-title-translator",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "private": true,
   "description": "Zotero 9 文献标题与摘要翻译及 PDF2zh Next 术语桥接插件",
   "scripts": {
-    "test": "node --check bootstrap.js && node --check core.js && node --check content/preferences.js && node tests/core.test.js && node tests/v030.test.js && node tests/v031.test.js && node tests/v032.test.js && node tests/v033.test.js && node tests/v034.test.js && node tests/v035.test.js && node tests/v036.test.js && node tests/v037.test.js && node tests/v038.test.js && node tests/v039.test.js && node tests/v0310.test.js",
-    "build": "python build_xpi.py"
+    "test": "node --check bootstrap.js && node --check core.js && node --check content/preferences.js && node tests/core.test.js && node tests/providers.test.js && node tests/v030.test.js && node tests/v031.test.js && node tests/v032.test.js && node tests/v033.test.js && node tests/v034.test.js && node tests/v035.test.js && node tests/v036.test.js && node tests/v037.test.js && node tests/v038.test.js && node tests/v039.test.js && node tests/v0310.test.js && python scripts/check_release.py",
+    "build": "python build_xpi.py --check",
+    "release:check": "python scripts/check_release.py",
+    "release:manifest": "python scripts/generate_updates.py",
+    "release:verify": "python scripts/check_release.py --dist",
+    "workflows:install": "python scripts/install_workflows.py"
   },
   "engines": {
     "node": ">=20"
