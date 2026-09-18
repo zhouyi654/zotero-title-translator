@@ -6,15 +6,15 @@ English | [中文](README.md)
 [![GitHub Release](https://img.shields.io/github/v/release/zhouyi654/zotero-title-translator)](https://github.com/zhouyi654/zotero-title-translator/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-An open-source translation plugin for **Zotero 9**. It translates publication titles and abstracts while preserving the original Zotero metadata. Translations are stored separately in the item's `Extra` field and can be displayed in the item list and information pane.
+An open-source translation plugin for **Zotero 9 and Zotero 10**. It translates publication titles and abstracts while preserving the original Zotero metadata. Translations are stored separately in the item's `Extra` field and can be displayed in the item list and information pane.
 
-**Compatibility: Zotero 9.0.x.** The manifest intentionally uses `strict_max_version: 9.0.*`, so compatibility is only declared for the latest minor line that has actually been tested.
+**Compatibility: Zotero 9.0.x–10.0.x.** The manifest uses `strict_min_version: 9.0` and `strict_max_version: 10.0.*`. Zotero 10 collection-pane multi-selection is handled via the plural selection APIs; collection/library-wide translation still operates on one collection or library at a time.
 
 **Install now:** [Open the latest release](https://github.com/zhouyi654/zotero-title-translator/releases/latest), download `zotero-title-translator-<version>.xpi`, then install it from Zotero **Tools → Plugins → Install Add-on From File…**.
 
 > Do not download GitHub's generated `Source code` archives. The Zotero install package is the `.xpi` file.
 
-> Current version: **0.3.11**. The project is still in an early public stage. Test your provider configuration with a small number of items before running collection- or library-wide translation.
+> Current version: **0.3.12**. The project is still in an early public stage. Test your provider configuration with a small number of items before running collection- or library-wide translation.
 
 ## Features
 
@@ -62,7 +62,7 @@ Requirements:
 
 - Node.js 20+
 - Python 3.10+
-- Zotero 9 for integration testing
+- Zotero 9 and Zotero 10 for integration testing
 
 Run the complete static/unit test suite:
 

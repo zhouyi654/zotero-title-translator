@@ -6,9 +6,9 @@
 [![GitHub Release](https://img.shields.io/github/v/release/zhouyi654/zotero-title-translator)](https://github.com/zhouyi654/zotero-title-translator/releases)
 [![许可证：MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-一个面向 **Zotero 9** 的开源标题与摘要翻译插件。插件不会覆盖文献的原始标题或摘要，而是在条目列表和信息侧边栏中显示独立的中文译文。
+一个面向 **Zotero 9 和 Zotero 10** 的开源标题与摘要翻译插件。插件不会覆盖文献的原始标题或摘要，而是在条目列表和信息侧边栏中显示独立的中文译文。
 
-**兼容范围：Zotero 9.0.x。** 插件清单使用 `strict_max_version: 9.0.*`，只声明已经测试过的 minor 版本；后续 Zotero 9.x minor 版本应在实际测试后再更新兼容范围。
+**兼容范围：Zotero 9.0.x–10.0.x。** 插件清单使用 `strict_min_version: 9.0` 与 `strict_max_version: 10.0.*`；Zotero 10 的分类列表多选使用复数选择 API，分类/整库翻译仍只对单个分类或文献库作用。
 
 **立即安装：** [打开 Latest Release](https://github.com/zhouyi654/zotero-title-translator/releases/latest) → 下载其中的 `zotero-title-translator-<version>.xpi` → Zotero **工具 → 插件 → 从文件安装插件**。
 
@@ -26,7 +26,7 @@
 - 支持在线 API、本地模型和自托管翻译服务；
 - 译题保存在 Zotero 条目的 `Extra` 字段中，可随条目同步。
 
-> 当前版本：**0.3.11**。项目仍处于早期公开阶段。建议先用少量文献测试服务配置，再执行分类或整库翻译。
+> 当前版本：**0.3.12**。项目仍处于早期公开阶段。建议先用少量文献测试服务配置，再执行分类或整库翻译。
 
 ---
 
@@ -187,7 +187,7 @@ python build_xpi.py --check
 生成文件：
 
 ```text
-dist/zotero-title-translator-0.3.11.xpi
+dist/zotero-title-translator-0.3.12.xpi
 ```
 
 ---
@@ -625,7 +625,7 @@ API Key 当前保存在本机 Zotero 首选项中，没有由插件进行额外�
 
 确认：
 
-- Zotero 为 9.0.x；
+- Zotero 为 9.0.x 或 10.0.x；
 - 安装的是 `.xpi`，不是源码 ZIP；
 - 浏览器没有把 XPI 改名为 ZIP；
 - 旧测试版已卸载。
@@ -668,7 +668,7 @@ API Key 当前保存在本机 Zotero 首选项中，没有由插件进行额外�
 
 - Node.js 20 或更高；
 - Python 3.10 或更高；
-- Zotero 9 测试环境。
+- Zotero 9 与 Zotero 10 测试环境。
 
 ### 测试
 
@@ -688,7 +688,7 @@ npm run release:verify
 输出：
 
 ```text
-dist/zotero-title-translator-0.3.11.xpi
+dist/zotero-title-translator-0.3.12.xpi
 dist/updates.json
 ```
 
@@ -747,7 +747,7 @@ prefs.js
 欢迎提交：
 
 - Bug 修复；
-- Zotero 9 兼容性改进；
+- Zotero 9/10 兼容性改进；
 - 翻译服务适配；
 - 限流和重试改进；
 - 自动翻译优化；

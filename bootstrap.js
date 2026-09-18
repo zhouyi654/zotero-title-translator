@@ -1041,6 +1041,20 @@ function createTitleTranslator(rootURI) {
             };
         }
 
+        const isLibraryScopeRow = (
+            (
+                typeof row.isLibrary === "function"
+                && row.isLibrary()
+            )
+            || (
+                typeof row.isGroup === "function"
+                && row.isGroup()
+            )
+        );
+        if (!isLibraryScopeRow) {
+            return null;
+        }
+
         const libraryID = getRowLibraryID(row);
         const library = libraryID
             ? Zotero.Libraries.get(libraryID)
@@ -1071,13 +1085,22 @@ function createTitleTranslator(rootURI) {
         let rows = [];
         if (typeof pane.getCollectionTreeRows === "function") {
             rows = pane.getCollectionTreeRows() || [];
+            if (rows.length) {
+                return scopeFromRows(window, rows);
+            }
         }
 
-        const rowScope = scopeFromRows(window, rows);
-        if (rowScope) {
-            return rowScope;
+        // Zotero 10 introduced multi-selection in the collections pane.
+        // If the plural APIs exist, do not fall back to singular getters:
+        // those can throw for multi-row selections.
+        if (
+            typeof pane.getSelectedCollections === "function"
+            || typeof pane.getSelectedLibraryIDs === "function"
+        ) {
+            return null;
         }
 
+        // Zotero 9 compatibility fallback.
         if (typeof pane.getSelectedCollection === "function") {
             const collection = pane.getSelectedCollection();
             if (collection) {
@@ -1087,7 +1110,7 @@ function createTitleTranslator(rootURI) {
                 return {
                     type: "collection",
                     pane,
-                    row: rows[0] || null,
+                    row: null,
                     library,
                     libraryID: collection.libraryID,
                     collection,
@@ -1107,7 +1130,7 @@ function createTitleTranslator(rootURI) {
                 return {
                     type: "library",
                     pane,
-                    row: rows[0] || null,
+                    row: null,
                     library,
                     libraryID,
                     collection: null,
@@ -1118,6 +1141,29 @@ function createTitleTranslator(rootURI) {
         }
 
         return null;
+    }
+
+    function getContextCollectionTreeRows(context) {
+        if (!context) {
+            return [];
+        }
+
+        if (Array.isArray(context.collectionTreeRows)) {
+            return context.collectionTreeRows;
+        }
+
+        // Zotero 9 menu contexts expose the singular property. Zotero 10
+        // exposes collectionTreeRows and may throw when the singular getter
+        // is read, so only touch it as a guarded legacy fallback.
+        try {
+            return context.collectionTreeRow
+                ? [context.collectionTreeRow]
+                : [];
+        }
+        catch (error) {
+            logError(error);
+            return [];
+        }
     }
 
     function scopeIsEditable(context) {
@@ -2977,12 +3023,7 @@ function createTitleTranslator(rootURI) {
                     icon: menuIconURI,
                     onShowing(event, context) {
                         const rows =
-                            context.collectionTreeRows
-                            || (
-                                context.collectionTreeRow
-                                    ? [context.collectionTreeRow]
-                                    : []
-                            );
+                            getContextCollectionTreeRows(context);
                         const window =
                             context.menuElem?.ownerGlobal
                             || event.currentTarget?.ownerGlobal
@@ -3002,12 +3043,7 @@ function createTitleTranslator(rootURI) {
                     },
                     onCommand(event, context) {
                         const rows =
-                            context.collectionTreeRows
-                            || (
-                                context.collectionTreeRow
-                                    ? [context.collectionTreeRow]
-                                    : []
-                            );
+                            getContextCollectionTreeRows(context);
                         const window =
                             context.menuElem?.ownerGlobal
                             || event.currentTarget?.ownerGlobal

@@ -1,15 +1,15 @@
 {
   "manifest_version": 2,
   "name": "Zotero 标题翻译",
-  "version": "0.3.11",
-  "description": "Zotero 9 文献标题与摘要翻译插件：支持侧边栏译文相邻显示、分类和自动翻译、术语集合及 PDF2zh Next 术语桥接。",
+  "version": "0.3.12",
+  "description": "Zotero 9/10 文献标题与摘要翻译插件：支持侧边栏译文相邻显示、分类和自动翻译、术语集合及 PDF2zh Next 术语桥接。",
   "author": "zhouyi654",
   "applications": {
     "zotero": {
       "id": "zotero-title-translator@zhouyi654.github.io",
       "update_url": "https://github.com/zhouyi654/zotero-title-translator/releases/latest/download/updates.json",
       "strict_min_version": "9.0",
-      "strict_max_version": "9.0.*"
+      "strict_max_version": "10.0.*"
     }
   },
   "homepage_url": "https://github.com/zhouyi654/zotero-title-translator",

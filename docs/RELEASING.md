@@ -23,7 +23,7 @@ npm run release:manifest
 npm run release:verify
 ```
 
-`strict_max_version` 应保持为已经实际测试过的 Zotero minor 版本，例如 `9.0.*`；不要为了“兼容未来版本”直接放宽为 `9.*`。升级到新的 Zotero minor/major 后应先测试，再更新兼容范围。
+`strict_max_version` 应保持为已经实际测试过的 Zotero minor 版本，例如当前 Zotero 10 发布线使用 `10.0.*`；不要为了“兼容未来版本”直接写成过宽的范围。升级到新的 Zotero minor/major 后应先测试，再更新兼容范围。
 
 预期生成：
 
@@ -69,11 +69,11 @@ git push origin main
 
 ## 4. 创建发布标签
 
-标签必须严格等于 `v` + `manifest.json` 版本，例如当前版本 `0.3.11` 对应：
+标签必须严格等于 `v` + `manifest.json` 版本，例如当前版本 `0.3.12` 对应：
 
 ```bash
-git tag v0.3.11
-git push origin v0.3.11
+git tag v0.3.12
+git push origin v0.3.12
 ```
 
 不要重复使用已经公开发布过的正式标签。已发布版本需要修复时，应增加版本号。
@@ -121,7 +121,7 @@ https://github.com/zhouyi654/zotero-title-translator/releases/latest/download/up
 发布完成后至少检查：
 
 1. GitHub Release 中存在 `.xpi` 和 `updates.json`；
-2. 下载 XPI 后能在受支持的 Zotero 9.0.x 中安装；
+2. 下载 XPI 后能在受支持的 Zotero 9.0.x 或 10.0.x 中安装；
 3. 插件管理器显示的版本正确；
 4. 从上一公开版本执行“检查更新”时能发现新版本；
 5. 标题翻译、摘要翻译和设置页面各执行一次最小冒烟测试；
